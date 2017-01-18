@@ -34,6 +34,13 @@ class AIPlayer(Player):
         super(AIPlayer, self).__init__(inputPlayerId, "Meme Attack")
         self.food = None
         self.tunnel = None
+        self.anthill = None
+        self.queen = None
+        self.move_queue = []
+        self.reset_move_queue()
+
+    def reset_move_queue(self):
+        self.move_queue = ['attack', 'build', 'gather', 'queen']
 
     def getPlacement(self, current_state):
         """
@@ -90,9 +97,67 @@ class AIPlayer(Player):
                      coordList [list of 2-tuples of ints],
                      buildType [int])
         """
-        my_inv = utils.getCurrPlayerInventory(current_state)
-        Move(c.BUILD, NONE, c.DRONE)
-        return None
+        inv = utils.getCurrPlayerInventory(current_state)
+        # pid = self.playerId
+        # set up closest food and tunnel (only one tunnel)
+        if self.tunnel is None:
+            self.tunnel = utils.getConstrList(
+                current_state, self.playerId, (c.TUNNEL,))[0]
+        if self.food is None:
+            # Adapted from FoodGatherer
+            foods = utils.getConstrList(current_state, None, (c.FOOD,))
+            self.food = foods[0]  # Pick first food
+            best_dist = 1000  # Inf.
+            for food in foods:
+                dist = utils.stepsToReach(
+                    current_state, self.tunnel.coords, food.coords)
+                if (dist < best_dist):
+                    self.myFood = food
+                    best_dist = dist
+
+        # Find the anthill. Mostly used for Her Majesty.
+        # Store the coords to avoid calling things(???) repeatedly
+        if self.anthill is None:
+            self.anthill = inv.getAnthill()
+
+        if 'queen' in self.move_queue:
+            pass
+
+        # move = self.move_queue.pop()
+        if 'gather' in self.move_queue:
+            return self.gather_food(current_state)
+            # path = utils.createPathToward(current_state, )
+
+        # Move(c.BUILD, None, c.DRONE)
+
+        self.reset_move_queue()
+        return Move(c.END, None, None)
+
+    def gather_food(self, current_state):
+        """Generate Move object for food gathering strategy.
+        Remove 'gather' from self.move_queue when done.
+
+        Return:
+            Move object for next step in food gathering.
+        """
+        worker = utils.getAntList(current_state, self.playerId, (c.WORKER,))[0]
+        if worker.carrying:
+            # If the worker has food, carry towards tunnel
+            path = utils.createPathToward(
+                current_state, worker.coords, self.tunnel.coords,
+                UNIT_STATS[c.WORKER][c.MOVEMENT])
+        else:
+            path = utils.createPathToward(
+                # if the worker does not have food, go get it
+                current_state, worker.coords, self.food.coords,
+                UNIT_STATS[c.WORKER][c.MOVEMENT])
+
+        self.move_queue.remove('gather')
+        return Move(c.MOVE_ANT, path, None)
+
+    def move_queen(self, current_state):
+        queen = utils.getCurrPlayerQueen(current_state)
+        pass
 
     def getAttack(self, current_state, attackingAnt, enemyLocations):
         """
@@ -183,3 +248,5 @@ class AIPlayer(Player):
             y += 1  # move down a row, will rarely happen
 
         return food_spots
+
+        # def gather_food(self, current_state, my_inv):
