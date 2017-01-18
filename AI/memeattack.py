@@ -4,7 +4,7 @@ import sys
 from os import path
 # so other modules can be found in parent dir
 sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))  # nopep8
-import Player as p
+from Player import Player
 import Constants as c
 from Construction import CONSTR_STATS
 from Ant import UNIT_STATS
@@ -31,18 +31,18 @@ class AIPlayer(Player):
         Parameters:
             inputPlayerId - The id to give the new player (int)
         """
-        super(AIPlayer, self).__init__(
-            inputPlayerId, "AI Template (not implemented)")
-        AIPlayer.__init__()
+        super(AIPlayer, self).__init__(inputPlayerId, "Meme Attack")
+        self.food = None
+        self.tunnel = None
 
-    def getPlacement(self, currentState):
+    def getPlacement(self, current_state):
         """
         Description:
             The getPlacement method corresponds to the
             action taken on setup phase 1 and setup phase 2 of the game.
             In setup phase 1, the AI player will be passed a copy of the
-            state as currentState which contains the board, accessed via
-            currentState.board. The player will then return a list of 11 tuple
+            state as current_state which contains the board, accessed via
+            current_state.board. The player will then return a list of 11 tuple
             coordinates (from their side of the board) that represent Locations
             to place the anthill and 9 grass pieces. In setup phase 2, the
             player will again be passed the state and needs to return a list
@@ -51,7 +51,7 @@ class AIPlayer(Player):
             This is all that is necessary to complete the setup phases.
 
         Parameters:
-          currentState - The current state of the game at the time the Game is
+          current_state - The current state of the game at the time the Game is
               requesting a placement from the player.(GameState)
 
         Return: If setup phase 1: list of eleven 2-tuples of ints ->
@@ -59,9 +59,13 @@ class AIPlayer(Player):
                 If setup phase 2: list of two 2-tuples of ints ->
                     [(x1,y1), (x2,y2)]
         """
-        return None
+        if current_state.phase == c.SETUP_PHASE_1:
+            placements = self.get_phase1_placement(current_state)
+        else:
+            placements = self.get_phase2_placement(current_state)
+        return placements
 
-    def getMove(self, currentState):
+    def getMove(self, current_state):
         """
         Description:
             The getMove method corresponds to the play phase of the
@@ -79,16 +83,18 @@ class AIPlayer(Player):
             coordinates are necessary, just set the type as END and return.
 
         Parameters:
-          currentState - The current state of the game at the time the Game is
+          current_state - The current state of the game at the time the Game is
               requesting a move from the player. (GameState)
 
         Return: Move(moveType [int],
                      coordList [list of 2-tuples of ints],
                      buildType [int])
         """
+        my_inv = utils.getCurrPlayerInventory(current_state)
+        Move(c.BUILD, NONE, c.DRONE)
         return None
 
-    def getAttack(self, currentState, attackingAnt, enemyLocations):
+    def getAttack(self, current_state, attackingAnt, enemyLocations):
         """
         Description:
             The getAttack method is called on the player whenever an ant
@@ -102,7 +108,7 @@ class AIPlayer(Player):
             these coordinates for a valid attack.
 
         Parameters:
-          currentState - The current state of the game at the time the
+          current_state - The current state of the game at the time the
                 Game is requesting a move from the player. (GameState)
           attackingAnt - A clone of the ant currently making the attack. (Ant)
           enemyLocation - A list of coordinate locations for valid attacks
@@ -111,7 +117,10 @@ class AIPlayer(Player):
         Return: A coordinate that matches one of the entries of enemyLocations.
                 ((int,int))
         """
-        return None
+        for enemy in enemyLocations:
+            if utils.getAntAt(current_state, enemy).type == c.WORKER:
+                return enemy
+        return enemyLocations[0]
 
     def registerWin(self, hasWon):
         """
@@ -126,3 +135,51 @@ class AIPlayer(Player):
         """
         # method templaste, not implemented
         pass
+
+    def get_phase1_placement(self, current_state):
+        """ Returns properly formatted list of tuples for Phase 1
+        placement of anthill, tunnel, and grass.
+
+        Parameters:
+          current_state - The current state of the game at the time the Game is
+              requesting a move from the player. (GameState)
+        """
+        ant_hill = (6, 1)
+        tunnel = (3, 1)
+        grass = [(x, 3) for x in xrange(10) if x != ant_hill[0]]
+        return [ant_hill, tunnel] + grass
+
+    def get_phase2_placement(self, current_state):
+        """ Returns properly formatted list of tuples for Phase 1
+        placement of anthill, tunnel, and grass.
+
+        Parameters:
+          current_state - The current state of the game at the time the Game is
+              requesting a move from the player. (GameState)
+        """
+        enemy_id = abs(self.playerId - 1)
+        enemy_anthill = utils.getConstrList(
+            current_state, enemy_id, (c.ANTHILL,))[0]
+        enemy_tunnel = utils.getConstrList(
+            current_state, enemy_id, (c.TUNNEL,))[0]
+        # enemy_grass = utils.getConstrList(current_state, enemy, (c.GRASS,))
+        enemy_range = [(x, y) for x in xrange(10) for y in xrange(6, 10)]
+
+        # place the food on the top row, close to our anthill if possible.
+        our_anthill = utils.getConstrList(
+            current_state, self.playerId, (c.ANTHILL,))[0]
+        # TODO: Make attempted placement order more intelligent
+        place_order = range(our_anthill.coords[0],
+                            10) + range(our_anthill.coords[0])
+
+        food_spots = []
+        y = 6  # top enemy terrirory
+        while len(food_spots) != 2:
+            for x in place_order:
+                if current_state.board[x][y].constr is None:
+                    food_spots.append((x, y))
+                    current_state.board[x][y].constr = True
+                    break
+            y += 1  # move down a row, will rarely happen
+
+        return food_spots
