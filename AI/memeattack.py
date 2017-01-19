@@ -34,13 +34,14 @@ class AIPlayer(Player):
         super(AIPlayer, self).__init__(inputPlayerId, "Meme Attack")
         self.food = None
         self.tunnel = None
-        self.anthill = None
-        self.queen = None
-        self.move_queue = []
-        self.reset_move_queue()
+        # self.anthill = None
+        # self.queen = None
+        self.inv = None
+        self.move_list = []
+        self.reset_move_list()
 
-    def reset_move_queue(self):
-        self.move_queue = ['attack', 'build', 'gather', 'queen']
+    def reset_move_list(self):
+        self.move_list = ['attack', 'build', 'gather', 'queen']
 
     def getPlacement(self, current_state):
         """
@@ -97,7 +98,7 @@ class AIPlayer(Player):
                      coordList [list of 2-tuples of ints],
                      buildType [int])
         """
-        inv = utils.getCurrPlayerInventory(current_state)
+        self.inv = utils.getCurrPlayerInventory(current_state)
         # pid = self.playerId
         # set up closest food and tunnel (only one tunnel)
         if self.tunnel is None:
@@ -111,31 +112,39 @@ class AIPlayer(Player):
             for food in foods:
                 dist = utils.stepsToReach(
                     current_state, self.tunnel.coords, food.coords)
-                if (dist < best_dist):
-                    self.myFood = food
+                if dist < best_dist:
+                    self.food = food
                     best_dist = dist
 
         # Find the anthill. Mostly used for Her Majesty.
-        # Store the coords to avoid calling things(???) repeatedly
-        if self.anthill is None:
-            self.anthill = inv.getAnthill()
+        # Store the object to avoid calling things(???) repeatedly
+        # if self.anthill is None:
+        #     self.anthill = self.inv.getAnthill()
 
-        if 'queen' in self.move_queue:
-            pass
+        # # Find the Queen. Mostly used for Her Majesty.
+        # # Store the object to avoid calling things(???) repeatedly
+        # if self.queen is None:
+        #     self.queen = self.inv.getQueen()
 
-        # move = self.move_queue.pop()
-        if 'gather' in self.move_queue:
+        if 'queen' in self.move_list:
+            qmove = self.move_queen(current_state)
+            # Move the queen if needed
+            if qmove is not None:
+                return qmove
+
+        # move = self.move_list.pop()
+        if 'gather' in self.move_list:
             return self.gather_food(current_state)
             # path = utils.createPathToward(current_state, )
 
         # Move(c.BUILD, None, c.DRONE)
 
-        self.reset_move_queue()
+        self.reset_move_list()
         return Move(c.END, None, None)
 
     def gather_food(self, current_state):
         """Generate Move object for food gathering strategy.
-        Remove 'gather' from self.move_queue when done.
+        Remove 'gather' from self.move_list when done.
 
         Return:
             Move object for next step in food gathering.
@@ -152,12 +161,54 @@ class AIPlayer(Player):
                 current_state, worker.coords, self.food.coords,
                 UNIT_STATS[c.WORKER][c.MOVEMENT])
 
-        self.move_queue.remove('gather')
+        self.move_list.remove('gather')
         return Move(c.MOVE_ANT, path, None)
 
     def move_queen(self, current_state):
-        queen = utils.getCurrPlayerQueen(current_state)
-        pass
+        queen = self.inv.getQueen()
+        # queen's range
+        qrange = [(x, y) for x in xrange(10) for y in xrange(4)]
+        # move = None  # move to eventually make
+        enemy_id = abs(self.playerId - 1)  # other player
+        enemies = utils.getAntList(current_state, enemy_id)  # enemy ants
+
+        enemies_in_range = [ant for ant in enemies if ant.coords in qrange]
+
+        # Find the closest enemy, there are any
+        if len(enemies_in_range):
+            best_dist = 1000  # inf
+            target = None  # ant to target
+            for ant in enemies_in_range:
+                dist = utils.stepsToReach(
+                    current_state, queen.coords, ant.coords)
+                if dist < best_dist:
+                    target = ant
+                    best_dist = dist
+            path = utils.createPathToward(
+                current_state, queen.coords, target.coords,
+                UNIT_STATS[c.QUEEN][c.MOVEMENT])
+            self.move_list.remove('queen')
+            return Move(c.MOVE_ANT, path, None)
+
+        # Make sure the queen isn't on the anthill
+        anthill = self.inv.getAnthill()
+        if queen.coords == anthill.coords:
+            qcords = queen.coords
+            food_coords = [food.coords for food in utils.getConstrList(
+                current_state, None, (c.FOOD,))]
+            adjacents = utils.listReachableAdjacent(
+                current_state, qcords, UNIT_STATS[c.QUEEN][c.MOVEMENT])
+            adjacents = [
+                coord for coord in adjacents if coord in qrange and
+                coord not in food_coords]
+            path = utils.createPathToward(
+                current_state, qcords, adjacents[0],
+                UNIT_STATS[c.QUEEN][c.MOVEMENT])
+            self.move_list.remove('queen')
+            return Move(c.MOVE_ANT, path, None)
+            # adjacents = [coord for coord in adjacents if current_state.bo]
+        self.move_list.remove('queen')
+        return None
 
     def getAttack(self, current_state, attackingAnt, enemyLocations):
         """
