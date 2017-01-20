@@ -165,10 +165,16 @@ class AIPlayer(Player):
         return Move(c.MOVE_ANT, path, None)
 
     def move_queen(self, current_state):
+        """Generate Move object for queen moving strategy.
+        Remove 'queen' from self.move_list when done.
+
+        Return:
+            Move object for next step in queen moving.
+        """
         queen = self.inv.getQueen()
         # queen's range
         qrange = [(x, y) for x in xrange(10) for y in xrange(4)]
-        # move = None  # move to eventually make
+        move = None  # move to eventually make
         enemy_id = abs(self.playerId - 1)  # other player
         enemies = utils.getAntList(current_state, enemy_id)  # enemy ants
 
@@ -187,28 +193,32 @@ class AIPlayer(Player):
             path = utils.createPathToward(
                 current_state, queen.coords, target.coords,
                 UNIT_STATS[c.QUEEN][c.MOVEMENT])
-            self.move_list.remove('queen')
-            return Move(c.MOVE_ANT, path, None)
+            # self.move_list.remove('queen')
+            # return Move(c.MOVE_ANT, path, None)
+            move = Move(c.MOVE_ANT, path, None)
 
         # Make sure the queen isn't on the anthill
-        anthill = self.inv.getAnthill()
-        if queen.coords == anthill.coords:
+        if queen.coords == anthill.coords and Move is not None:
+            anthill = self.inv.getAnthill()
             qcords = queen.coords
             food_coords = [food.coords for food in utils.getConstrList(
                 current_state, None, (c.FOOD,))]
             adjacents = utils.listReachableAdjacent(
                 current_state, qcords, UNIT_STATS[c.QUEEN][c.MOVEMENT])
+            # Only consider adjacents which are in our territory and don't
+            # have food on them.
             adjacents = [
                 coord for coord in adjacents if coord in qrange and
                 coord not in food_coords]
             path = utils.createPathToward(
                 current_state, qcords, adjacents[0],
                 UNIT_STATS[c.QUEEN][c.MOVEMENT])
-            self.move_list.remove('queen')
-            return Move(c.MOVE_ANT, path, None)
+            # self.move_list.remove('queen')
+            # return Move(c.MOVE_ANT, path, None)
+            move = Move(c.MOVE_ANT, path, None)
             # adjacents = [coord for coord in adjacents if current_state.bo]
         self.move_list.remove('queen')
-        return None
+        return move
 
     def getAttack(self, current_state, attackingAnt, enemyLocations):
         """
