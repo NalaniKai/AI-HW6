@@ -34,8 +34,7 @@ class AIPlayer(Player):
         super(AIPlayer, self).__init__(inputPlayerId, "Meme Attack")
         self.food = None
         self.tunnel = None
-        # self.anthill = None
-        # self.queen = None
+        self.current_state = None
         self.inv = None
         self.tried_drone = False
         self.move_list = []
@@ -100,6 +99,7 @@ class AIPlayer(Player):
                      buildType [int])
         """
         self.inv = utils.getCurrPlayerInventory(current_state)
+        self.current_state = current_state
         # pid = self.playerId
         # set up closest food and tunnel (only one tunnel)
         if self.tunnel is None:
@@ -130,25 +130,25 @@ class AIPlayer(Player):
         #     self.queen = self.inv.getQueen()
 
         if 'queen' in self.move_list:
-            qmove = self.move_queen(current_state)
+            qmove = self.move_queen()
             # Move the queen if needed
             if qmove is not None:
                 return qmove
 
         # move = self.move_list.pop()
         if 'gather' in self.move_list:
-            gmove = self.gather_food(current_state)
+            gmove = self.gather_food()
             if gmove is not None:
                 return gmove
             # path = utils.createPathToward(current_state, )
 
         if 'build' in self.move_list:
-            bmove = self.build_ants(current_state)
+            bmove = self.build_ants()
             if bmove is not None:
                 return bmove
 
         if 'attack' in self.move_list:
-            amove = self.move_to_attack(current_state)
+            amove = self.move_to_attack()
             if amove is not None:
                 return amove
 
@@ -157,7 +157,7 @@ class AIPlayer(Player):
         self.reset_move_list()
         return Move(c.END, None, None)
 
-    def gather_food(self, current_state):
+    def gather_food(self):
         """
         Generate Move object for food gathering strategy.
         Remove 'gather' from self.move_list when done.
@@ -165,7 +165,8 @@ class AIPlayer(Player):
         Return:
             Move object for next step in food gathering.
         """
-        workers = utils.getAntList(current_state, self.playerId, (c.WORKER,))
+        workers = utils.getAntList(
+            self.current_state, self.playerId, (c.WORKER,))
         if len(workers) == 0:
             self.move_list.remove('gather')
             return None
@@ -173,18 +174,18 @@ class AIPlayer(Player):
         if worker.carrying:
             # If the worker has food, carry towards tunnel
             path = utils.createPathToward(
-                current_state, worker.coords, self.tunnel.coords,
+                self.current_state, worker.coords, self.tunnel.coords,
                 UNIT_STATS[c.WORKER][c.MOVEMENT])
         else:
             path = utils.createPathToward(
                 # if the worker does not have food, go get it
-                current_state, worker.coords, self.food.coords,
+                self.current_state, worker.coords, self.food.coords,
                 UNIT_STATS[c.WORKER][c.MOVEMENT])
 
         self.move_list.remove('gather')
         return Move(c.MOVE_ANT, path, None)
 
-    def move_queen(self, current_state):
+    def move_queen(self):
         """
         Generate Move object for queen moving strategy.
         Remove 'queen' from self.move_list when done.
@@ -197,7 +198,7 @@ class AIPlayer(Player):
         qrange = [(x, y) for x in xrange(10) for y in xrange(4)]
         move = None  # move to eventually make
         enemy_id = abs(self.playerId - 1)  # other player
-        enemies = utils.getAntList(current_state, enemy_id)  # enemy ants
+        enemies = utils.getAntList(self.current_state, enemy_id)  # enemy ants
 
         enemies_in_range = [ant for ant in enemies if ant.coords in qrange]
 
@@ -207,12 +208,12 @@ class AIPlayer(Player):
             target = None  # ant to target
             for ant in enemies_in_range:
                 dist = utils.stepsToReach(
-                    current_state, queen.coords, ant.coords)
+                    self.current_state, queen.coords, ant.coords)
                 if dist < best_dist:
                     target = ant
                     best_dist = dist
             path = utils.createPathToward(
-                current_state, queen.coords, target.coords,
+                self.current_state, queen.coords, target.coords,
                 UNIT_STATS[c.QUEEN][c.MOVEMENT])
             # self.move_list.remove('queen')
             # return Move(c.MOVE_ANT, path, None)
@@ -221,38 +222,39 @@ class AIPlayer(Player):
         # Make sure the queen isn't on the anthill or food
         anthill = self.inv.getAnthill()
         keep_offs = [food.coords for food in utils.getConstrList(
-            current_state, None, (c.FOOD,))]
+            self.current_state, None, (c.FOOD,))]
         keep_offs.append(anthill.coords)
-        keep_offs.extend(utils.getConstrList(current_state, None, (c.TUNNEL,)))
+        keep_offs.extend(utils.getConstrList(
+            self.current_state, None, (c.TUNNEL,)))
         # keep_offs.append()
         if move is None and queen.coords in keep_offs:
             qcords = queen.coords
             # food_coords = [food.coords for food in utils.getConstrList(
-            #     current_state, None, (c.FOOD,))]
+            #     self.current_state, None, (c.FOOD,))]
             adjacents = utils.listReachableAdjacent(
-                current_state, qcords, UNIT_STATS[c.QUEEN][c.MOVEMENT])
+                self.current_state, qcords, UNIT_STATS[c.QUEEN][c.MOVEMENT])
             # Only consider adjacents which are in our territory and don't
             # have food on them.
             adjacents = [
                 coord for coord in adjacents if coord in qrange and
                 coord not in keep_offs]
             path = utils.createPathToward(
-                current_state, qcords, adjacents[0],
+                self.current_state, qcords, adjacents[0],
                 UNIT_STATS[c.QUEEN][c.MOVEMENT])
             # self.move_list.remove('queen')
             # return Move(c.MOVE_ANT, path, None)
             move = Move(c.MOVE_ANT, path, None)
-            # adjacents = [coord for coord in adjacents if current_state.bo]
+            # adjacents = [coord for coord in adjacents if self.current_state.bo]
 
         # Move off of food
         # food_coords = [food.coords for food in utils.getConstrList(
-        #     current_state, None, (c.FOOD,))]
+        #     self.current_state, None, (c.FOOD,))]
         # if queen.coords == food_coords[0] or queen.coords == food_coords[1]:
 
         self.move_list.remove('queen')
         return move
 
-    def build_ants(self, current_state):
+    def build_ants(self):
         """
         Generate Move object for the next move in the ant building strategy.
         Build a worker if they're all dead, or build a drone if one has
@@ -267,9 +269,9 @@ class AIPlayer(Player):
         food_count = self.inv.foodCount
         anthill = self.inv.getAnthill()
 
-        # inital check to see if we can build ants at all
+        # initial check to see if we can build ants at all
         if (food_count == 0 or
-                utils.getAntAt(current_state, anthill.coords) is not None):
+                utils.getAntAt(self.current_state, anthill.coords) is not None):  # nopep8
             self.move_list.remove('build')
             return None
 
@@ -290,7 +292,7 @@ class AIPlayer(Player):
         self.move_list.remove('build')
         return move
 
-    def move_to_attack(self, current_state):
+    def move_to_attack(self):
         """
         Generate Move object for the next move in the attack strategy.
         In essence, move any unmoved attacking-type ants (i.e. soldiers and drones)
@@ -314,7 +316,7 @@ class AIPlayer(Player):
 
         drones = [ant for ant in attackers if ant.type == c.DRONE]
 
-        enemies = utils.getAntList(current_state, abs(self.playerId - 1))
+        enemies = utils.getAntList(self.current_state, abs(self.playerId - 1))
         e_workers = [ant for ant in enemies if ant.type == c.WORKER]
 
         if len(e_workers) == 0 or len(drones) == 0:
@@ -326,13 +328,13 @@ class AIPlayer(Player):
         target = e_workers[0]
         for enemy in e_workers:
             dist = utils.stepsToReach(
-                current_state, drones[0].coords, enemy.coords)
+                self.current_state, drones[0].coords, enemy.coords)
             if dist < attack_dist:
                 attack_dist = dist
                 target = enemy
 
         path = utils.createPathToward(
-            current_state, drones[0].coords, target.coords,
+            self.current_state, drones[0].coords, target.coords,
             UNIT_STATS[c.DRONE][c.MOVEMENT])
         return Move(c.MOVE_ANT, path, None)
 
