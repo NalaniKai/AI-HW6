@@ -158,7 +158,8 @@ class AIPlayer(Player):
         return Move(c.END, None, None)
 
     def gather_food(self, current_state):
-        """Generate Move object for food gathering strategy.
+        """
+        Generate Move object for food gathering strategy.
         Remove 'gather' from self.move_list when done.
 
         Return:
@@ -184,7 +185,8 @@ class AIPlayer(Player):
         return Move(c.MOVE_ANT, path, None)
 
     def move_queen(self, current_state):
-        """Generate Move object for queen moving strategy.
+        """
+        Generate Move object for queen moving strategy.
         Remove 'queen' from self.move_list when done.
 
         Return:
@@ -251,6 +253,17 @@ class AIPlayer(Player):
         return move
 
     def build_ants(self, current_state):
+        """
+        Generate Move object for the next move in the ant building strategy.
+        Build a worker if they're all dead, or build a drone if one has
+        not yet been built.
+
+        Removes 'build' from self.move_list when done.
+
+        Return:
+            Move object for next step in ant building.
+            None if no next step.
+        """
         food_count = self.inv.foodCount
         anthill = self.inv.getAnthill()
 
@@ -278,6 +291,18 @@ class AIPlayer(Player):
         return move
 
     def move_to_attack(self, current_state):
+        """
+        Generate Move object for the next move in the attack strategy.
+        In essence, move any unmoved attacking-type ants (i.e. soldiers and drones)
+        towards the nearest workers.
+
+        Removes 'attack' from self.move_list when done.
+
+        Return:
+            Move object for next step in attacking.
+            None if no next step.
+
+        """
         attackers = [ant for ant in self.inv.ants
                      if ant.type != c.WORKER and
                      ant.type != c.QUEEN and
@@ -357,7 +382,8 @@ class AIPlayer(Player):
         pass
 
     def get_phase1_placement(self, current_state):
-        """ Returns properly formatted list of tuples for Phase 1
+        """
+        Returns properly formatted list of tuples for Phase 1
         placement of anthill, tunnel, and grass.
 
         Parameters:
@@ -370,7 +396,8 @@ class AIPlayer(Player):
         return [ant_hill, tunnel] + grass
 
     def get_phase2_placement(self, current_state):
-        """ Returns properly formatted list of tuples for Phase 2
+        """
+        Returns properly formatted list of tuples for Phase 2
         placement of food on enemy side.
 
         Parameters:
