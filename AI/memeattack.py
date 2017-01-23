@@ -37,6 +37,7 @@ class AIPlayer(Player):
         # self.anthill = None
         # self.queen = None
         self.inv = None
+        self.tried_drone = False
         self.move_list = []
         self.reset_move_list()
 
@@ -145,6 +146,11 @@ class AIPlayer(Player):
             bmove = self.build_ants(current_state)
             if bmove is not None:
                 return bmove
+
+        if 'attack' in self.move_list:
+            amove = self.move_to_attack(current_state)
+            if amove is not None:
+                return amove
 
         # Move(c.BUILD, None, c.DRONE)
 
@@ -263,11 +269,47 @@ class AIPlayer(Player):
         if len(workers) == 0:
             move = Move(c.BUILD, [anthill.coords], c.WORKER)
 
-        if len(drones) == 0 and food_count >= 2 and move is None:
+        if (len(drones) == 0 and food_count >= 2 and
+                move is None and not self.tried_drone):
+            self.tried_drone = True
             move = Move(c.BUILD, [anthill.coords], c.DRONE)
 
         self.move_list.remove('build')
         return move
+
+    def move_to_attack(self, current_state):
+        attackers = [ant for ant in self.inv.ants
+                     if ant.type != c.WORKER and
+                     ant.type != c.QUEEN and
+                     not ant.hasMoved]
+
+        if len(attackers) == 0:
+            self.move_list.remove('attack')
+            return None
+
+        drones = [ant for ant in attackers if ant.type == c.DRONE]
+
+        enemies = utils.getAntList(current_state, abs(self.playerId - 1))
+        e_workers = [ant for ant in enemies if ant.type == c.WORKER]
+
+        if len(e_workers) == 0 or len(drones) == 0:
+            self.move_list.remove('attack')
+            return None
+
+        # attack the nearest worker
+        attack_dist = 1000  # inf
+        target = e_workers[0]
+        for enemy in e_workers:
+            dist = utils.stepsToReach(
+                current_state, drones[0].coords, enemy.coords)
+            if dist < attack_dist:
+                attack_dist = dist
+                target = enemy
+
+        path = utils.createPathToward(
+            current_state, drones[0].coords, target.coords,
+            UNIT_STATS[c.DRONE][c.MOVEMENT])
+        return Move(c.MOVE_ANT, path, None)
 
     def getAttack(self, current_state, attackingAnt, enemyLocations):
         """
@@ -311,6 +353,7 @@ class AIPlayer(Player):
         # method templaste, not implemented
         self.food = None
         self.tunnel = None
+        self.tried_drone = None
         pass
 
     def get_phase1_placement(self, current_state):
