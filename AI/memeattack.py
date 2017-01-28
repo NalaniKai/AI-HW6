@@ -224,8 +224,8 @@ class AIPlayer(Player):
         keep_offs = [food.coords for food in utils.getConstrList(
             self.current_state, None, (c.FOOD,))]
         keep_offs.append(anthill.coords)
-        keep_offs.extend(utils.getConstrList(
-            self.current_state, None, (c.TUNNEL,)))
+        keep_offs.extend([t.coords for t in utils.getConstrList(
+            self.current_state, None, (c.TUNNEL,))])
         # keep_offs.append()
         if move is None and queen.coords in keep_offs:
             qcords = queen.coords
