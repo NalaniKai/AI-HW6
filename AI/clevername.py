@@ -61,17 +61,17 @@ class AIPlayer(Player):
             moves = []
             for i in range(0, numToPlace):
                 move = None
-                while move == None:
+                while move is None:
                     # Choose any x location
                     x = random.randint(0, 9)
                     # Choose any y location on your side of the board
                     y = random.randint(0, 3)
                     # Set the move if this space is empty
-                    if currentState.board[x][y].constr == None and (x, y) not in moves:
+                    if currentState.board[x][y].constr is None and (x, y) not in moves:
                         move = (x, y)
                         # Just need to make the space non-empty. So I threw
                         # whatever I felt like in there.
-                        currentState.board[x][y].constr == True
+                        currentState.board[x][y].constr is True
                 moves.append(move)
             return moves
         elif currentState.phase == SETUP_PHASE_2:  # stuff on foe's side
@@ -79,17 +79,17 @@ class AIPlayer(Player):
             moves = []
             for i in range(0, numToPlace):
                 move = None
-                while move == None:
+                while move is None:
                     # Choose any x location
                     x = random.randint(0, 9)
                     # Choose any y location on enemy side of the board
                     y = random.randint(6, 9)
                     # Set the move if this space is empty
-                    if currentState.board[x][y].constr == None and (x, y) not in moves:
+                    if currentState.board[x][y].constr is None and (x, y) not in moves:
                         move = (x, y)
                         # Just need to make the space non-empty. So I threw
                         # whatever I felt like in there.
-                        currentState.board[x][y].constr == True
+                        currentState.board[x][y].constr is True
                 moves.append(move)
             return moves
         else:
