@@ -1,7 +1,7 @@
 import random
 from Constants import *
-from Ant import UNIT_STATS
-from Construction import CONSTR_STATS
+from Ant import *
+from Construction import *
 from Move import *
 
 #
@@ -367,6 +367,7 @@ def createPathToward(currentState, sourceCoords, targetCoords, movement):
                     #restart the search from the new coordinate
                     movement = movement - moveCost
                     sourceCoords = coord
+                    distToTarget = approxDist(sourceCoords, targetCoords)
                     break
         if (not found): break #no usable steps found
 
@@ -522,6 +523,106 @@ def getCurrPlayerQueen(currentState):
             queen = inv.getQueen()
             break
     return queen
+
+##
+# getNextState
+#
+# Author:  Jordan Goldey (Class of 2017)
+#
+# Description: Creates a copy of the given state and modifies the inventories in
+# it to reflect what they would look like after a given move.  For efficiency,
+# only the inventories are modified and the board is set to None.  The original
+# (given) state is not modified.
+#
+# Parameters:
+#   currentState - A clone of the current state (GameState)
+#   move - The move that the agent would take (Move)
+#
+# Return: A clone of what the state would look like if the move was made
+##
+def getNextState(currentState, move):
+    # variables I will need
+    myGameState = currentState.fastclone()
+    myInv = getCurrPlayerInventory(myGameState)
+    me = myGameState.whoseTurn
+    myAnts = myInv.ants
+
+    # If enemy ant is on my anthill or tunnel update capture health
+    myTunnels = myInv.getTunnels()
+    myAntHill = myInv.getAnthill()
+    for myTunnel in myTunnels:
+        ant = getAntAt(myGameState, myTunnel.coords)
+        if ant is not None:
+            opponentsAnts = myGameState.inventories[not me].ants
+            if ant in opponentsAnts:
+                myTunnel.captureHealth -= 1
+    if getAntAt(myGameState, myAntHill.coords) is not None:
+        ant = getAntAt(myGameState, myAntHill.coords)
+        opponentsAnts = myGameState.inventories[not me].ants
+        if ant in opponentsAnts:
+            myAntHill.captureHealth -= 1
+
+    # If an ant is built update list of ants
+    antTypes = [WORKER, DRONE, SOLDIER, R_SOLDIER]
+    if move.moveType == BUILD:
+        if move.buildType in antTypes:
+            ant = Ant(myInv.getAnthill().coords, move.buildType, me)
+            myInv.ants.append(ant)
+            # Update food count depending on ant built
+            if move.buildType == WORKER:
+                myInv.foodCount -= 1
+            elif move.buildType == DRONE or move.buildType == R_SOLDIER:
+                myInv.foodCount -= 2
+            elif move.buildType == SOLDIER:
+                myInv.foodCount -= 3
+
+    # If a building is built update list of buildings and the update food count
+    if move.moveType == BUILD:
+        if move.buildType == TUNNEL:
+            building = Construction(move.coordList[0], move.buildType)
+            myInv.constrs.append(building)
+            myInv.foodCount -= 3
+
+    # If an ant is moved update their coordinates and has moved
+    if move.moveType == MOVE_ANT:
+        newCoord = move.coordList[len(move.coordList) - 1]
+        startingCoord = move.coordList[0]
+        for ant in myAnts:
+            if ant.coords == startingCoord:
+                ant.coords = newCoord
+                ant.hasMoved = False
+                # If an ant is carrying food and ends on the anthill or tunnel drop the food
+                if ant.carrying and ant.coords == myInv.getAnthill().coords:
+                    myInv.foodCount += 1
+                    ant.carrying = False
+                for tunnels in myTunnels:
+                    if ant.carrying and (ant.coords == tunnels.coords):
+                        myInv.foodCount += 1
+                        ant.carrying = False
+                # If an ant doesn't have food and ends on the food grab food
+                if not ant.carrying:
+                    foods = getConstrList(myGameState, None, (FOOD,))
+                    for food in foods:
+                        if food.coords == ant.coords:
+                            ant.carrying = True
+                # If my ant is close to an enemy ant attack it
+                adjacentTiles = listAdjacent(ant.coords)
+                for adj in adjacentTiles:
+                    if getAntAt(myGameState, adj) is not None:  # If ant is adjacent my ant
+                        closeAnt = getAntAt(myGameState, adj)
+                        if closeAnt.player != me:  # if the ant is not me
+                            closeAnt.health = closeAnt.health - UNIT_STATS[ant.type][ATTACK]  # attack
+                            # If an enemy is attacked and looses all its health remove it from the other players
+                            # inventory
+                            if closeAnt.health <= 0:
+                                enemyAnts = myGameState.inventories[not me].ants
+                                for enemy in enemyAnts:
+                                    if closeAnt.coords == enemy.coords:
+                                        myGameState.inventories[not me].ants.remove(enemy)
+                            # If attacked an ant already don't attack any more
+                            break
+    return myGameState
+
     
 ##
 # returns a character representation of a given ant
