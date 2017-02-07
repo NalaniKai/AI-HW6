@@ -9,43 +9,51 @@ from Move import Move
 from GameState import *
 from AIPlayerUtils import *
 
-##
-# AIPlayer
-# Description: The responsbility of this class is to interact with the game by
-# deciding a valid move based on a given game state. This class has methods that
-# will be implemented by students in Dr. Nuxoll's AI course.
-#
-# Variables:
-#   playerId - The id of the player.
-##
-
 
 class AIPlayer(Player):
+    """
+    Description:
+        The responsibility of this class is to interact with the game
+        by deciding a valid move based on a given game state. This class has
+        methods that will be implemented by students in Dr. Nuxoll's AI course.
 
-    #__init__
-    # Description: Creates a new Player
-    #
-    # Parameters:
-    #   inputPlayerId - The id to give the new player (int)
-    ##
+    Variables:
+        playerId - The id of the player.
+    """
+
     def __init__(self, inputPlayerId):
+        """
+        Creates a new Player
+
+        Parameters:
+            inputPlayerId - The id to give the new player (int)
+        """
         super(AIPlayer, self).__init__(inputPlayerId, "Clever Name")
 
-    ##
-    # getPlacement
-    #
-    # Description: called during setup phase for each Construction that
-    #   must be placed by the player.  These items are: 1 Anthill on
-    #   the player's side; 1 tunnel on player's side; 9 grass on the
-    #   player's side; and 2 food on the enemy's side.
-    #
-    # Parameters:
-    #   construction - the Construction to be placed.
-    #   currentState - the state of the game at this point in time.
-    #
-    # Return: The coordinates of where the construction is to be placed
-    ##
     def getPlacement(self, currentState):
+        """
+        Description:
+            The getPlacement method corresponds to the
+            action taken on setup phase 1 and setup phase 2 of the game.
+            In setup phase 1, the AI player will be passed a copy of the
+            state as current_state which contains the board, accessed via
+            current_state.board. The player will then return a list of 11 tuple
+            coordinates (from their side of the board) that represent Locations
+            to place the anthill and 9 grass pieces. In setup phase 2, the
+            player will again be passed the state and needs to return a list
+            of 2 tuple coordinates (on their opponent's side of the board)
+            which represent locations to place the food sources.
+            This is all that is necessary to complete the setup phases.
+
+        Parameters:
+          current_state - The current state of the game at the time the Game is
+              requesting a placement from the player.(GameState)
+
+        Return: If setup phase 1: list of eleven 2-tuples of ints ->
+                    [(x1,y1), (x2,y2),...,(x10,y10)]
+                If setup phase 2: list of two 2-tuples of ints ->
+                    [(x1,y1), (x2,y2)]
+        """
         numToPlace = 0
         # implemented by students to return their next move
         if currentState.phase == SETUP_PHASE_1:  # stuff on my side
@@ -87,16 +95,19 @@ class AIPlayer(Player):
         else:
             return [(0, 0)]
 
-    ##
-    # getMove
-    # Description: Gets the next move from the Player.
-    #
-    # Parameters:
-    #   currentState - The state of the current game waiting for the player's move (GameState)
-    #
-    # Return: The Move to be made
-    ##
     def getMove(self, currentState):
+        """
+        Description:
+            Gets the next move from the Player.
+
+        Parameters:
+          current_state - The current state of the game at the time the Game is
+              requesting a move from the player. (GameState)
+
+        Return: Move(moveType [int],
+                     coordList [list of 2-tuples of ints],
+                     buildType [int])
+        """
         moves = listAllLegalMoves(currentState)
         selectedMove = moves[random.randint(0, len(moves) - 1)]
 
@@ -107,15 +118,20 @@ class AIPlayer(Player):
 
         return selectedMove
 
-    ##
-    # getAttack
-    # Description: Gets the attack to be made from the Player
-    #
-    # Parameters:
-    #   currentState - A clone of the current state (GameState)
-    #   attackingAnt - The ant currently making the attack (Ant)
-    #   enemyLocation - The Locations of the Enemies that can be attacked (Location[])
-    ##
     def getAttack(self, currentState, attackingAnt, enemyLocations):
+        """
+        Description:
+            Gets the attack to be made from the Player
+
+        Parameters:
+          current_state - The current state of the game at the time the
+                Game is requesting a move from the player. (GameState)
+          attackingAnt - A clone of the ant currently making the attack. (Ant)
+          enemyLocation - A list of coordinate locations for valid attacks
+            (i.e. enemies within range) ([list of 2-tuples of ints])
+
+        Return: A coordinate that matches one of the entries of enemyLocations.
+                ((int,int))
+        """
         # Attack a random enemy.
         return enemyLocations[random.randint(0, len(enemyLocations) - 1)]
