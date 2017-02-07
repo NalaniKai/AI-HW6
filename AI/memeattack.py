@@ -100,7 +100,6 @@ class AIPlayer(Player):
         """
         self.inv = utils.getCurrPlayerInventory(current_state)
         self.current_state = current_state
-        # pid = self.playerId
         # set up closest food and tunnel (only one tunnel)
         if self.tunnel is None:
             self.tunnel = utils.getConstrList(
@@ -118,16 +117,6 @@ class AIPlayer(Player):
                 if dist < best_dist:
                     self.food = food
                     best_dist = dist
-
-        # Find the anthill. Mostly used for Her Majesty.
-        # Store the object to avoid calling things(???) repeatedly
-        # if self.anthill is None:
-        #     self.anthill = self.inv.getAnthill()
-
-        # # Find the Queen. Mostly used for Her Majesty.
-        # # Store the object to avoid calling things(???) repeatedly
-        # if self.queen is None:
-        #     self.queen = self.inv.getQueen()
 
         if 'queen' in self.move_list:
             qmove = self.move_queen()
@@ -241,10 +230,7 @@ class AIPlayer(Player):
             path = utils.createPathToward(
                 self.current_state, qcords, adjacents[0],
                 UNIT_STATS[c.QUEEN][c.MOVEMENT])
-            # self.move_list.remove('queen')
-            # return Move(c.MOVE_ANT, path, None)
             move = Move(c.MOVE_ANT, path, None)
-            # adjacents = [coord for coord in adjacents if self.current_state.bo]
 
         # Move off of food
         # food_coords = [food.coords for food in utils.getConstrList(
@@ -377,7 +363,7 @@ class AIPlayer(Player):
           hasWon - True if the player has won the game,
                 False if the player lost. (Boolean)
         """
-        # method templaste, not implemented
+        # Reset a few instance variables for the next game
         self.food = None
         self.tunnel = None
         self.tried_drone = None

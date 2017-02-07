@@ -2,3 +2,5 @@ venv
 *.pyc
 tags
 .vscode
+.DS_Store
+*creighto17*
