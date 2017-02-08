@@ -181,17 +181,17 @@ class AIPlayer(Player):
 
         nodes = [Node(move, state) for move, state in zip(all_moves, next_states)]
 
+        # Recurse if needed.
         if depth_left > 0:
             for node in nodes:
                 new_node = self.recursion_in_python_is_bad(node.state, depth_left - 1)
                 node.score = new_node.score
 
+        # Prevent the ants form getting stuck when all moves
+        # are equal.
         random.shuffle(nodes)
 
-        try:
-            best_node = max(nodes, key=lambda node: node.score)
-        except:
-            whoa_there = nodes
+        best_node = max(nodes, key=lambda node: node.score)
 
         if best_node.score <= 0.01:
             return Node(Move(c.END, None, None), state, 0.01)
@@ -286,7 +286,7 @@ class AIPlayer(Player):
 
         # print self.score_state(currentState)
         # print self.recursion_in_python_is_bad(currentState, 1).score
-        node = self.recursion_in_python_is_bad(currentState, 0)
+        node = self.recursion_in_python_is_bad(currentState, 1)
 
         print "Current: {}, next node: {}".format(self.score_state(currentState), node.score)
 
@@ -312,6 +312,9 @@ class AIPlayer(Player):
 
 
 class Node(object):
+    """
+    Simple class for a search tree Node.
+    """
 
     def __init__(self, move, state, score=None, parent=None):
         self.move = move
