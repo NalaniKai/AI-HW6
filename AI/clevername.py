@@ -1,5 +1,6 @@
 import random
 import sys
+import math
 from os import path
 sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))  # nopep8
 from Player import Player
@@ -22,6 +23,14 @@ class AIPlayer(Player):
         playerId - The id of the player.
     """
 
+    class Node(object):
+
+        def __init__(self, move, state, score, parent=None):
+            self.move = move
+            self.state = state
+            self.score = score
+            self.parent = None
+
     def __init__(self, inputPlayerId):
         """
         Creates a new Player
@@ -30,6 +39,108 @@ class AIPlayer(Player):
             inputPlayerId - The id to give the new player (int)
         """
         super(AIPlayer, self).__init__(inputPlayerId, "Clever Name")
+
+    def score_state(self, state):
+        # enemy_id = abs(self.playerId - 1)
+        enemy_id = abs(state.whoseTurn)
+        our_inv = utils.getCurrPlayerInventory(state)
+        enemy_inv = [
+            inv for inv in state.inventories if inv.player == enemy_id].pop()
+
+        # Initial win condition checks:
+        if (our_inv.foodCount == 11 or
+            our_inv.getQueen().health == 0 or
+                our_inv.getAnthill().captureHealth == 0):
+            return 0.0
+        # Initial win condition checks:
+        if (enemy_inv.foodCount == 11 or
+            enemy_inv.getQueen().health == 0 or
+                enemy_inv.getAnthill().captureHealth == 0):
+            return 1.0
+
+        # Total points possible
+        total_points = 1
+        # Good points earned
+        good_points = 0
+
+        # Score food
+        total_points += (our_inv.foodCount + enemy_inv.foodCount) * 100
+        good_points += our_inv.foodCount * 100
+        # More points the greater the difference:
+        # total_points += math.pow(5, abs(our_inv.foodCount - enemy_inv.foodCount))
+        # if our_inv.foodCount > enemy_inv.foodCount:
+        #     good_points += math.pow(5,
+        #                             abs(our_inv.foodCount - enemy_inv.foodCount))
+        # Differences over, say, 4 are weighted heavier
+        if abs(our_inv.foodCount - enemy_inv.foodCount) > 4:
+            total_points += abs(our_inv.foodCount - enemy_inv.foodCount) * 700
+            if our_inv.foodCount > enemy_inv.foodCount:
+                good_points += abs(our_inv.foodCount -
+                                   enemy_inv.foodCount) * 700
+
+        # Carrying food is good
+        # We don't really care about the enemy in this case,
+        # so we'll just give ourselves a small bonus if we have food
+        our_workers = [ant for ant in our_inv.ants if ant.type == c.WORKER]
+        for ant in our_workers:
+            if ant.carrying:
+                total_points += 35
+                good_points += 35
+
+        # Raw ant numbers comparison
+        total_points += (len(our_inv.ants) + len(enemy_inv.ants)) * 40
+        good_points += len(our_inv.ants) * 40
+
+        # Weighted ant types
+        # Workers, first 2 are worth 20, the rest are worth 10
+        # our_workers = [ant for ant in our_inv.ants if ant.type == c.WORKER]
+        # our_workers is defined above
+        enemy_workers = [ant for ant in enemy_inv.ants if ant.type == c.WORKER]
+        if len(our_workers) <= 2:
+            total_points += len(our_workers) * 20
+            good_points += len(our_workers) * 20
+        else:
+            total_points += (len(our_workers) - 2) * 10 + 40
+            good_points += (len(our_workers) - 2) * 10 + 40
+        if len(enemy_workers) <= 2:
+            total_points += len(enemy_workers) * 20
+        else:
+            total_points += (len(enemy_workers) - 2) * 10 + 40
+
+        # Offensive ants
+        # Let's just say each ant is worth 50x its cost for now
+        # TODO: Better weighting
+        offensive = [c.SOLDIER, c.R_SOLDIER, c.DRONE]
+        our_offense = [ant for ant in our_inv.ants if ant.type in offensive]
+        enemy_offense = [
+            ant for ant in enemy_inv.ants if ant.type in offensive]
+        for ant in our_offense:
+            good_points += UNIT_STATS[ant.type][c.COST] * 50
+            total_points += UNIT_STATS[ant.type][c.COST] * 50
+        for ant in enemy_offense:
+            total_points += UNIT_STATS[ant.type][c.COST] * 50
+
+        # Queen stuff
+        # Queen healths, big deal, each HP is worth 300!
+        our_queen = our_inv.getQueen()
+        enemy_queen = enemy_inv.getQueen()
+        total_points += (our_queen.health + enemy_queen.health) * 300
+        good_points += our_queen.health * 300
+        # TODO: Consider if the queen is under threat
+
+        # Anthill stuff
+        our_anthill = our_inv.getAnthill()
+        enemy_anthill = enemy_inv.getAnthill()
+
+        total_points += (our_anthill.captureHealth +
+                         enemy_anthill.captureHealth) * 700
+        good_points += our_anthill.captureHealth * 700
+
+        return float(good_points) / float(total_points)
+
+    def evaluate_nodes(self, nodes):
+        """ Evalute a list of Nodes and returns the best score. """
+        return max(map(self.score_state, nodes))
 
     def getPlacement(self, currentState):
         """
@@ -116,6 +227,8 @@ class AIPlayer(Player):
         numAnts = len(currentState.inventories[currentState.whoseTurn].ants)
         while (selectedMove.moveType == c.BUILD and numAnts >= 3):
             selectedMove = moves[random.randint(0, len(moves) - 1)]
+
+        print self.score_state(currentState)
 
         return selectedMove
 
