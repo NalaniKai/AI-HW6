@@ -1,13 +1,13 @@
 import random
 import sys
 sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))  # nopep8
-from Player import *
-from Constants import *
+from Player import Player
+import Constants as c
 from Construction import CONSTR_STATS
 from Ant import UNIT_STATS
 from Move import Move
-from GameState import *
-from AIPlayerUtils import *
+from GameState import addCoords, subtractCoords
+import AIPlayerUtils as utils
 
 
 class AIPlayer(Player):
@@ -56,7 +56,7 @@ class AIPlayer(Player):
         """
         numToPlace = 0
         # implemented by students to return their next move
-        if currentState.phase == SETUP_PHASE_1:  # stuff on my side
+        if currentState.phase == c.SETUP_PHASE_1:  # stuff on my side
             numToPlace = 11
             moves = []
             for i in range(0, numToPlace):
@@ -74,7 +74,7 @@ class AIPlayer(Player):
                         currentState.board[x][y].constr is True
                 moves.append(move)
             return moves
-        elif currentState.phase == SETUP_PHASE_2:  # stuff on foe's side
+        elif currentState.phase == c.SETUP_PHASE_2:  # stuff on foe's side
             numToPlace = 2
             moves = []
             for i in range(0, numToPlace):
@@ -108,7 +108,7 @@ class AIPlayer(Player):
                      coordList [list of 2-tuples of ints],
                      buildType [int])
         """
-        moves = listAllLegalMoves(currentState)
+        moves = utils.listAllLegalMoves(currentState)
         selectedMove = moves[random.randint(0, len(moves) - 1)]
 
         # don't do a build move if there are already 3+ ants
