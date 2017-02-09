@@ -106,18 +106,18 @@ class AIPlayer(Player):
             ant_x = ant.coords[0]
             ant_y = ant.coords[1]
             for enemy in enemy_inv.ants:
-                if ((abs(ant_x - enemy.coords[0]) > 4) and 
-                    (abs(ant_y - enemy.coords[1]) > 4)):
+                if ((abs(ant_x - enemy.coords[0]) > 4) and
+                        (abs(ant_y - enemy.coords[1]) > 4)):
                     good_points += 50
                     total_points += 50
             if ant.carrying:
                 total_points += 50
-                good_points += 50                 
+                good_points += 50
 
                 for dist in range(2, 4):
                     for dropoff in food_drop_offs:
-                        if ((abs(ant_x - dropoff[0]) < dist) and 
-                            (abs(ant_y - dropoff[1]) < dist)):
+                        if ((abs(ant_x - dropoff[0]) < dist) and
+                                (abs(ant_y - dropoff[1]) < dist)):
                             good_points += food_move - (dist * 25)
                             total_points += food_move - (dist * 25)
 
@@ -152,7 +152,7 @@ class AIPlayer(Player):
         our_range = [(x, y) for x in xrange(10) for y in xrange(4)]
         if len([ant for ant in our_workers if ant.coords not in our_range]) != 0:
             total_points += 100000
-          
+
         # if len(enemy_workers) <= 3:
         #     total_points += len(enemy_workers) * 20
         # else:
@@ -167,29 +167,29 @@ class AIPlayer(Player):
             ant for ant in enemy_inv.ants if ant.type in offensive]
 
         for ant in our_offense:
-            ant_x = ant.coords[0] 
-            ant_y = ant.coords[1] 
+            ant_x = ant.coords[0]
+            ant_y = ant.coords[1]
             attack_move = 3000
             good_points += UNIT_STATS[ant.type][c.COST] * 120
             total_points += UNIT_STATS[ant.type][c.COST] * 120
-            #good if on enemy anthill
-            if (ant.coords == enemy_anthill.coords):
+            # good if on enemy anthill
+            if ant.coords == enemy_anthill.coords:
                 total_points += 2000
                 good_points += 2000
             for enemy_ant in enemy_inv.ants:
-                enemy_x = enemy_ant.coords[0] 
-                enemy_y = enemy_ant.coords[1]  
-                x_dist = abs(ant_x-enemy_x)
-                y_dist = abs(ant_y-enemy_y)
+                enemy_x = enemy_ant.coords[0]
+                enemy_y = enemy_ant.coords[1]
+                x_dist = abs(ant_x - enemy_x)
+                y_dist = abs(ant_y - enemy_y)
 
-                #good if attacker ant attacks
-                if ((x_dist + y_dist) == 1):
-                    good_points += attack_move 
-                    total_points += attack_move 
+                # good if attacker ant attacks
+                if (x_dist + y_dist) == 1:
+                    good_points += attack_move
+                    total_points += attack_move
 
-                #weighted more if closer to attacking
-                for dist in range(1, 8):
-                    if ((x_dist < dist) and (y_dist < dist)):
+                # weighted more if closer to attacking
+                for dist in xrange(1, 8):
+                    if (x_dist < dist) and (y_dist < dist):
                         good_points += attack_move - (dist * 350)
                         total_points += attack_move - (dist * 350)
         for ant in enemy_offense:
@@ -204,7 +204,7 @@ class AIPlayer(Player):
         total_points += (our_queen.health + enemy_queen.health) * 300
         good_points += our_queen.health * 300
         queen_coords = our_queen.coords
-        if ((queen_coords in food_drop_offs) or (queen_coords[1] > 2)):
+        if (queen_coords in food_drop_offs) or (queen_coords[1] > 2):
             total_points += 500000
 
         # TODO: Consider if the queen is under threat
@@ -237,20 +237,24 @@ class AIPlayer(Player):
 
         next_states = [utils.getNextState(state, move) for move in all_moves]
 
-        nodes = [Node(move, state) for move, state in zip(all_moves, next_states)]
+        nodes = [Node(move, state)
+                 for move, state in zip(all_moves, next_states)]
 
         # Recurse if needed.
         if depth_left > 0:
             for node in nodes:
                 new_node = node
                 if (max_score == 0.0):
-                    new_node = self.recursion_in_python_is_bad(node.state, depth_left - 1)
-                elif (node.score > max_score): 
+                    new_node = self.recursion_in_python_is_bad(
+                        node.state, depth_left - 1)
+                elif (node.score > max_score):
                     max_score = node.score
-                    new_node = self.recursion_in_python_is_bad(node.state, depth_left - 1)    
+                    new_node = self.recursion_in_python_is_bad(
+                        node.state, depth_left - 1)
                 if (new_node.score > node.score):
-                    node.score = new_node.score             
-                if (max_score > 0.6): break 
+                    node.score = new_node.score
+                if (max_score > 0.6):
+                    break
 
         # Prevent the ants form getting stuck when all moves
         # are equal.
