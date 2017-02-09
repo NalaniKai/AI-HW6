@@ -32,22 +32,22 @@ class AIPlayer(Player):
         """
         super(AIPlayer, self).__init__(inputPlayerId, "Clever Name")
 
-    """
-    Compute a 'goodness' score of a given state for the current player.
-    The score is computed by tallying up a total number of possible 'points',
-    as well as a number of 'good' points.
-
-    Various elements are weighted heavier than others, by providing more points.
-    Some metrics, like food difference, is weighted by difference between the two
-    players.
-
-    Note: This is a staticmethod, it can be called without instanceing this class.
-
-    Parameters:
-        state - GameState to score.
-    """
     @staticmethod
     def score_state(state):
+        """
+        Compute a 'goodness' score of a given state for the current player.
+        The score is computed by tallying up a total number of possible 'points',
+        as well as a number of 'good' points.
+
+        Various elements are weighted heavier than others, by providing more points.
+        Some metrics, like food difference, is weighted by difference between the two
+        players.
+
+        Note: This is a staticmethod, it can be called without instanceing this class.
+
+        Parameters:
+            state - GameState to score.
+        """
         enemy_id = abs(state.whoseTurn - 1)
         our_inv = utils.getCurrPlayerInventory(state)
         enemy_inv = [
