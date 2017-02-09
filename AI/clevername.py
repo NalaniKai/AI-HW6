@@ -34,8 +34,25 @@ class AIPlayer(Player):
 
     @staticmethod
     def score_state(state):
+<<<<<<< HEAD
         we_win = 1.0
         enemy_win = 0.0
+=======
+        """
+        Compute a 'goodness' score of a given state for the current player.
+        The score is computed by tallying up a total number of possible 'points',
+        as well as a number of 'good' points.
+
+        Various elements are weighted heavier than others, by providing more points.
+        Some metrics, like food difference, is weighted by difference between the two
+        players.
+
+        Note: This is a staticmethod, it can be called without instanceing this class.
+
+        Parameters:
+            state - GameState to score.
+        """
+>>>>>>> 23abe00d600da960acc9658113444f2ce4be26ff
         # enemy_id = abs(self.playerId - 1)
         enemy_id = abs(state.whoseTurn - 1)
         our_inv = utils.getCurrPlayerInventory(state)
@@ -120,7 +137,7 @@ class AIPlayer(Player):
         #     good_points += 60
         else:
             # STOP IT
-            return 0.01
+            return 0.001
         total_points += len(enemy_workers) * 20
 
         # prefer workers to not leave home
