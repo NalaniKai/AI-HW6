@@ -244,16 +244,16 @@ class AIPlayer(Player):
         if depth_left > 0:
             for node in nodes:
                 new_node = node
-                if (max_score == 0.0):
+                if max_score == 0.0:
                     new_node = self.recursion_in_python_is_bad(
                         node.state, depth_left - 1)
-                elif (node.score > max_score):
+                elif node.score > max_score:
                     max_score = node.score
                     new_node = self.recursion_in_python_is_bad(
                         node.state, depth_left - 1)
-                if (new_node.score > node.score):
+                if new_node.score > node.score:
                     node.score = new_node.score
-                if (max_score > 0.6):
+                if max_score > 0.6:
                     break
 
         # Prevent the ants form getting stuck when all moves
@@ -384,6 +384,8 @@ class Node(object):
     """
     Simple class for a search tree Node.
     """
+
+    __slots__ = ('move', 'state', 'score', 'parent')
 
     def __init__(self, move, state, score=None, parent=None):
         self.move = move
