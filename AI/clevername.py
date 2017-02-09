@@ -34,6 +34,8 @@ class AIPlayer(Player):
 
     @staticmethod
     def score_state(state):
+        we_win = 1.0
+        enemy_win = 0.0
         # enemy_id = abs(self.playerId - 1)
         enemy_id = abs(state.whoseTurn - 1)
         our_inv = utils.getCurrPlayerInventory(state)
@@ -44,38 +46,48 @@ class AIPlayer(Player):
         if (our_inv.foodCount == 11 or
             our_inv.getQueen() is None or
                 our_inv.getAnthill().captureHealth == 0):
-            return 0.0
+            return we_win
         # Initial win condition checks:
         if (enemy_inv.foodCount == 11 or
             enemy_inv.getQueen() is None or
                 enemy_inv.getAnthill().captureHealth == 0):
-            return 1.0
+            return enemy_win
 
         # Total points possible
         total_points = 1
         # Good points earned
         good_points = 0
 
+        our_food = our_inv.foodCount
+        enemy_food = enemy_inv.foodCount
+        food_difference = abs(our_food - enemy_food)
+
         # Score food
-        total_points += (our_inv.foodCount + enemy_inv.foodCount) * 100
-        good_points += our_inv.foodCount * 100
+        total_points += (our_food + enemy_food) * 100
+        good_points += our_food * 100
         # More points the greater the difference:
         # total_points += math.pow(5, abs(our_inv.foodCount - enemy_inv.foodCount))
         # if our_inv.foodCount > enemy_inv.foodCount:
         #     good_points += math.pow(5,
         #                             abs(our_inv.foodCount - enemy_inv.foodCount))
         # Differences over, say, 4 are weighted heavier
-        if abs(our_inv.foodCount - enemy_inv.foodCount) > 4:
-            total_points += abs(our_inv.foodCount - enemy_inv.foodCount) * 700
-            if our_inv.foodCount > enemy_inv.foodCount:
-                good_points += abs(our_inv.foodCount -
-                                   enemy_inv.foodCount) * 700
+        if food_difference > 4:
+            total_points += food_difference * 700
+            if our_food > enemy_food:
+                good_points += food_difference * 700
 
         # Carrying food is good
         # We don't really care about the enemy in this case,
         # so we'll just give ourselves a small bonus if we have food
         our_workers = [ant for ant in our_inv.ants if ant.type == c.WORKER]
         for ant in our_workers:
+            ant_x = ant.coords[0]
+            ant_y = ant.coords[1]
+            for enemy in enemy_inv.ants:
+                if ((abs(ant_x - enemy.coords[0]) > 4) and 
+                    (abs(ant_y - enemy.coords[1]) > 4)):
+                    good_points += 500
+                    total_points += 500
             if ant.carrying:
                 total_points += 35
                 good_points += 35
@@ -114,7 +126,7 @@ class AIPlayer(Player):
         # prefer workers to not leave home
         our_range = [(x, y) for x in xrange(10) for y in xrange(4)]
         if len([ant for ant in our_workers if ant.coords not in our_range]) != 0:
-            total_points += 10000
+            total_points += 100000
         # if len(enemy_workers) <= 3:
         #     total_points += len(enemy_workers) * 20
         # else:
@@ -128,13 +140,24 @@ class AIPlayer(Player):
         enemy_offense = [
             ant for ant in enemy_inv.ants if ant.type in offensive]
         for ant in our_offense:
+            ant_x = ant.coords[0] 
+            ant_y = ant.coords[1] 
+            attack_move = 2000
             good_points += UNIT_STATS[ant.type][c.COST] * 120
             total_points += UNIT_STATS[ant.type][c.COST] * 120
+            for enemy_ant in enemy_inv.ants:
+                enemy_x = enemy_ant.coords[0] 
+                enemy_y = enemy_ant.coords[1]  
+                for dist in range(1, 8):
+                    if (((ant_x + dist == enemy_x) or (ant_x - dist == enemy_x)) and 
+                        ((ant_y + dist == enemy_y) or (ant_y - dist == enemy_y))):
+                        good_points += attack_move - (dist * 100)
+                        total_points += attack_move - (dist * 100)
         for ant in enemy_offense:
             total_points += UNIT_STATS[ant.type][c.COST] * 120
 
-        # Stop building if we have more than 7 ants
-        if len(our_inv.ants) > 7:
+        # Stop building if we have more than 6 ants
+        if len(our_inv.ants) > 6:
             total_points += 100000000000000
 
         # Queen stuff
@@ -155,8 +178,8 @@ class AIPlayer(Player):
         # stepping on anthill == good
         # ants = [ant for ant in our_inv.ants]
         if len([ant for ant in our_offense if ant.coords == enemy_anthill.coords]) != 0:
-            total_points += 2000
-            good_points += 2000
+            total_points += 20000
+            good_points += 20000
 
         return float(good_points) / float(total_points)
 
