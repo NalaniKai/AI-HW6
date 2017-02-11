@@ -65,23 +65,23 @@ class AIPlayer(Player):
         food_drop_offs = [our_tunnel.coords]
         food_drop_offs.append(our_anthill.coords)
 
-        # enemy_id = abs(self.playerId - 1)
-
-        # Initial win condition checks:
-        if (our_food == 11 or
-            our_queen is None or
-                our_anthill.captureHealth == 0):
-            return we_win
-        # Initial win condition checks:
-        if (enemy_food == 11 or
-            enemy_queen is None or
-                enemy_anthill.captureHealth == 0):
-            return enemy_win
-
         # Total points possible
         total_points = 1
         # Good points earned
         good_points = 0
+
+        # enemy_id = abs(self.playerId - 1)
+
+        # Initial win condition checks:
+        if (our_food == 11 or
+            enemy_queen is None or
+                enemy_anthill.captureHealth == 0):
+            return we_win
+        # Initial lose condition checks:
+        if (enemy_food == 11 or
+            our_queen is None or
+                our_anthill.captureHealth == 0):
+            return enemy_win
 
         # Score food
         total_points += (our_food + enemy_food) * 100
@@ -91,8 +91,8 @@ class AIPlayer(Player):
         # if our_inv.foodCount > enemy_inv.foodCount:
         #     good_points += math.pow(5,
         #                             abs(our_inv.foodCount - enemy_inv.foodCount))
-        # Differences over, say, 4 are weighted heavier
-        if food_difference > 4:
+        # Differences over, say, 3 are weighted heavier
+        if food_difference > 3:
             total_points += food_difference * 800
             if our_food > enemy_food:
                 good_points += food_difference * 800
@@ -106,8 +106,8 @@ class AIPlayer(Player):
             ant_x = ant.coords[0]
             ant_y = ant.coords[1]
             for enemy in enemy_inv.ants:
-                if ((abs(ant_x - enemy.coords[0]) > 4) and
-                        (abs(ant_y - enemy.coords[1]) > 4)):
+                if ((abs(ant_x - enemy.coords[0]) > 3) and
+                        (abs(ant_y - enemy.coords[1]) > 3)):
                     good_points += 50
                     total_points += 50
             if ant.carrying:
@@ -127,8 +127,8 @@ class AIPlayer(Player):
             good_points += 3000
 
         # Raw ant numbers comparison
-        total_points += (len(our_inv.ants) + len(enemy_inv.ants)) * 40
-        good_points += len(our_inv.ants) * 40
+        total_points += (len(our_inv.ants) + len(enemy_inv.ants)) * 30
+        good_points += len(our_inv.ants) * 30
 
         # Weighted ant types
         # Workers, first 3 are worth 20, the rest are penalized
@@ -197,7 +197,8 @@ class AIPlayer(Player):
 
         # Stop building if we have more than 5 ants
         if len(our_inv.ants) > 5:
-            total_points += 100000000000000
+           return .001
+           # total_points += 100000000000000
 
         # Queen stuff
         # Queen healths, big deal, each HP is worth 300!
@@ -205,9 +206,19 @@ class AIPlayer(Player):
         good_points += our_queen.health * 300
         queen_coords = our_queen.coords
         if (queen_coords in food_drop_offs) or (queen_coords[1] > 2):
-            total_points += 500000
+            return .001
+            #total_points += 500000
 
-        # TODO: Consider if the queen is under threat
+        # queen attacks if under threat
+        for enemy_ant in enemy_inv.ants:
+                enemy_x = enemy_ant.coords[0]
+                enemy_y = enemy_ant.coords[1]
+                x_dist = abs(queen_coords[0] - enemy_x)
+                y_dist = abs(queen_coords[1] - enemy_y)
+
+                if (x_dist + y_dist) == 1:
+                    good_points += 600
+                    total_points += 600
 
         # Anthill stuff
         # our_anthill = our_inv.getAnthill() Defined above
@@ -355,7 +366,8 @@ class AIPlayer(Player):
 
         # print self.score_state(currentState)
         # print self.recursion_in_python_is_bad(currentState, 1).score
-        node = self.recursion_in_python_is_bad(currentState, 1)
+        depth = 2
+        node = self.recursion_in_python_is_bad(currentState, depth)
 
         print "Current: {}, next node: {}".format(self.score_state(currentState), node.score)
 
