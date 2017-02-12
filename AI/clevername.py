@@ -256,7 +256,8 @@ class AIPlayer(Player):
 
         # If there are moves left, then end the turn.
         if len(all_moves) == 0:
-            return Node(Move(c.END, None, None), state, 0.5)
+            return Move(c.END, None, None)
+            # return Node(Move(c.END, None, None), state, 0.5)
 
         next_states = [self.getNextState(state, move) for move in all_moves]
 
@@ -268,7 +269,8 @@ class AIPlayer(Player):
 
         # If every move is bad, then just end the turn.
         if best_node.score <= 0.01:
-            return Node(Move(c.END, None, None), state, 0.01)
+            return Move(c.END, None, None)
+            # return Node(Move(c.END, None, None), state, 0.01)
 
         return best_node.move
 
