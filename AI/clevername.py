@@ -8,7 +8,7 @@ import Constants as c
 from Construction import CONSTR_STATS, Construction
 from Ant import UNIT_STATS, Ant
 from Move import Move
-from GameState import addCoords, subtractCoords
+from GameState import addCoords, subtractCoords, GameState
 import AIPlayerUtils as utils
 
 
@@ -240,6 +240,9 @@ class AIPlayer(Player):
         Returns the best move for a given state, searching to a given
         depth limit. Uses score_state() to find how 'good' a certain move is.
 
+        The first depth level is done here, remaining levels are done in
+        analyze_subnodes() recursively.
+
         Parameters:
             state - GameState to analyze
             depth_limit - Depth limit for search
@@ -261,11 +264,12 @@ class AIPlayer(Player):
 
         next_states = [self.getNextState(state, move) for move in all_moves]
 
+        # Build first level of nodes
         nodes = [Node(move, state)
                  for move, state in zip(all_moves, next_states)]
 
         # Analyze the subnodes for this state. nodes is modified in-place.
-        best_node = self.analyze_sub_nodes(state, depth_limit - 1, nodes=nodes)
+        best_node = self.analyze_subnodes(state, depth_limit - 1, nodes=nodes)
 
         # If every move is bad, then just end the turn.
         if best_node.score <= 0.01:
@@ -274,7 +278,7 @@ class AIPlayer(Player):
 
         return best_node.move
 
-    def analyze_sub_nodes(self, state, depth_limit, nodes=None):
+    def analyze_subnodes(self, state, depth_limit, nodes=None):
         """
         This is the recursive method. Function stack beware.
 
@@ -312,7 +316,7 @@ class AIPlayer(Player):
         if depth_limit >= 1:
             for node in nodes:
                 # Set the node's score to the best score of its subnodes.
-                best_node = self.analyze_sub_nodes(node.state, depth_limit - 1)
+                best_node = self.analyze_subnodes(node.state, depth_limit - 1)
                 node.score = best_node.score
                 # If we have a good move, the just use it.
                 if node.score > 0.7:
@@ -541,11 +545,3 @@ class Node(object):
         if score is None:
             self.score = AIPlayer.score_state(state)
         self.parent = parent
-        # if parent is not None:
-        #     self.update_parent_score()
-
-    # def update_parent_score(self):
-    #     parent = self.parent
-    #     while parent is not None:
-    #         parent.score = max(self.score, parent.score)
-    #         parent = parent.parent
