@@ -5,8 +5,8 @@ from os import path
 sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))  # nopep8
 from Player import Player
 import Constants as c
-from Construction import CONSTR_STATS
-from Ant import UNIT_STATS
+from Construction import CONSTR_STATS, Construction
+from Ant import UNIT_STATS, Ant
 from Move import Move
 from GameState import addCoords, subtractCoords
 import AIPlayerUtils as utils
@@ -100,8 +100,22 @@ class AIPlayer(Player):
         # Carrying food is good
         # We don't really care about the enemy in this case,
         # so we'll just give ourselves a small bonus if we have food
+        # dropping_off = []
         food_move = 100
         our_workers = [ant for ant in our_inv.ants if ant.type == c.WORKER]
+
+        # Food drop off points
+        dropping_off = [
+            ant for ant in our_workers if ant.coords in food_drop_offs and ant.carrying]
+
+        # Depositing food is even better!
+        if len(dropping_off) != 0:
+            total_points += food_move * 30  # 3000
+            good_points += food_move * 30  # 3000
+            # print dropping_off
+            # Remove penalty for not carrying food
+
+        # Worker movement
         for ant in our_workers:
             ant_x = ant.coords[0]
             ant_y = ant.coords[1]
@@ -110,7 +124,9 @@ class AIPlayer(Player):
                         (abs(ant_y - enemy.coords[1]) > 3)):
                     good_points += 60  # 50
                     total_points += 60  # 50
-            if ant.carrying:
+            if ant.carrying and ant not in dropping_off:
+                # Good if carrying ants move toward
+                # a drop off.
                 total_points += food_move  # 50
                 good_points += food_move  # 50
 
@@ -121,20 +137,12 @@ class AIPlayer(Player):
                             good_points += food_move - (dist * 25)
                             total_points += food_move - (dist * 25)
 
-        # Depositing food is even better!
-        if any([ant for ant in our_workers if ant.coords in food_drop_offs and ant.carrying]):
-            total_points += food_move * 2  # 3000
-            good_points += food_move * 2  # 3000
-
         # Raw ant numbers comparison
         total_points += (len(our_inv.ants) + len(enemy_inv.ants)) * 10  # 30
         good_points += len(our_inv.ants) * 10  # 30
 
         # Weighted ant types
-        # Workers, first 3 are worth 20, the rest are penalized
-        # STOP BUILDING SO MANY WORKERS PLEASE
-        # our_workers = [ant for ant in our_inv.ants if ant.type == c.WORKER]
-        # our_workers is defined above
+        # Workers, first 3 are worth 10, the rest are penalized
         enemy_workers = [ant for ant in enemy_inv.ants if ant.type == c.WORKER]
         if len(our_workers) <= 3:
             total_points += len(our_workers) * 10  # 20
@@ -148,20 +156,13 @@ class AIPlayer(Player):
             return 0.001
         total_points += len(enemy_workers) * 50
 
-        # prefer workers to not leave home
+        # prefer workers to not leave home range
         our_range = [(x, y) for x in xrange(10) for y in xrange(5)]
         if len([ant for ant in our_workers if ant.coords not in our_range]) != 0:
             return .001
-            # total_points += 100000
-
-        # if len(enemy_workers) <= 3:
-        #     total_points += len(enemy_workers) * 20
-        # else:
-        #     total_points += (len(enemy_workers) - 2) * 10 + 60
 
         # Offensive ants
-        # Let's just say each ant is worth 120x its cost for now
-        # TODO: Better weighting
+        # Let's just say each ant is worth 20x its cost for now
         offensive = [c.SOLDIER, c.R_SOLDIER, c.DRONE]
         our_offense = [ant for ant in our_inv.ants if ant.type in offensive]
         enemy_offense = [
@@ -171,12 +172,12 @@ class AIPlayer(Player):
             ant_x = ant.coords[0]
             ant_y = ant.coords[1]
             attack_move = 160  # 3000
-            good_points += UNIT_STATS[ant.type][c.COST] * 20  # 120
-            total_points += UNIT_STATS[ant.type][c.COST] * 20  # 120
+            good_points += UNIT_STATS[ant.type][c.COST] * 20
+            total_points += UNIT_STATS[ant.type][c.COST] * 20
             # good if on enemy anthill
             if ant.coords == enemy_anthill.coords:
-                total_points += 100  # 2000
-                good_points += 100  # 2000
+                total_points += 100
+                good_points += 100
             for enemy_ant in enemy_inv.ants:
                 enemy_x = enemy_ant.coords[0]
                 enemy_y = enemy_ant.coords[1]
@@ -184,7 +185,7 @@ class AIPlayer(Player):
                 y_dist = abs(ant_y - enemy_y)
 
                 # good if attacker ant attacks
-                if (x_dist + y_dist) == 1:
+                if x_dist + y_dist == 1:
                     good_points += attack_move * 2
                     total_points += attack_move * 2
 
@@ -200,14 +201,14 @@ class AIPlayer(Player):
         # Stop building if we have more than 5 ants
         if len(our_inv.ants) > 5:
             return .001
-            # total_points += 100000000000000
 
         # Queen stuff
-        # Queen healths, big deal, each HP is worth 300!
-        total_points += (our_queen.health + enemy_queen.health) * 100  # 300
-        good_points += our_queen.health * 100  # 300
+        # Queen healths, big deal, each HP is worth 100!
+        total_points += (our_queen.health + enemy_queen.health) * 100
+        good_points += our_queen.health * 100
         queen_coords = our_queen.coords
         if queen_coords in food_drop_offs or queen_coords[1] > 2:
+            # Stay off food_drop_offs and away from the front lines.
             return .001
             # total_points += 500000
 
@@ -223,7 +224,6 @@ class AIPlayer(Player):
                 total_points += 200  # 600
 
         # Anthill stuff
-        # our_anthill = our_inv.getAnthill() Defined above
         total_points += (our_anthill.captureHealth +
                          enemy_anthill.captureHealth) * 200  # 700
         good_points += our_anthill.captureHealth * 200  # 700
@@ -235,9 +235,18 @@ class AIPlayer(Player):
         return max(nodes, key=lambda node: node.score)
         # return max([self.score_state(node.state) for node in nodes])
 
-    def recursion_in_python_is_bad(self, state, depth_left, moves=None):
-        """Silly Python."""
-        max_score = 0.0
+    def get_best_move(self, state, depth_limit, moves=None):
+        """
+        Returns the best move for a given state, searching to a given
+        depth limit. Uses score_state() to find how 'good' a certain move is.
+
+        Parameters:
+            state - GameState to analyze
+            depth_limit - Depth limit for search
+
+        Returns:
+            Move with the best score.
+        """
         # If we get a list of moves, just get rid of the END move(s)
         if moves is None:
             all_moves = [move for move in utils.listAllLegalMoves(
@@ -245,40 +254,74 @@ class AIPlayer(Player):
         else:
             all_moves = [move for move in moves if move.moveType != c.END]
 
+        # If there are moves left, then end the turn.
         if len(all_moves) == 0:
             return Node(Move(c.END, None, None), state, 0.5)
 
-        next_states = [utils.getNextState(state, move) for move in all_moves]
+        next_states = [self.getNextState(state, move) for move in all_moves]
 
         nodes = [Node(move, state)
                  for move, state in zip(all_moves, next_states)]
 
-        # Recurse if needed.
-        if depth_left > 0:
+        # Analyze the subnodes for this state. nodes is modified in-place.
+        best_node = self.analyze_sub_nodes(state, depth_limit - 1, nodes=nodes)
+
+        # If every move is bad, then just end the turn.
+        if best_node.score <= 0.01:
+            return Node(Move(c.END, None, None), state, 0.01)
+
+        return best_node.move
+
+    def analyze_sub_nodes(self, state, depth_limit, nodes=None):
+        """
+        This is the recursive method. Function stack beware.
+
+        Analyze each subnode of a given state to a given depth limit.
+        Update each node's score and return the highest-scoring subnode.
+
+        Parameters:
+            state - GameState to analyze
+            depth_limit - Depth limit for search
+            nodes (optional) - List of subnodes. Used if first depth
+                level is computed elsewhere (in get_best_move)
+
+        Returns:
+            Best scoring analyzed sub-node.
+        """
+        # If nodes haven't been passed, then expand the current
+        # state's subnodes.
+        if nodes is None:
+            all_moves = [move for move in utils.listAllLegalMoves(
+                state) if move.moveType != c.END]
+
+            next_states = [self.getNextState(state, move)
+                           for move in all_moves]
+
+            nodes = [Node(move, state)
+                     for move, state in zip(all_moves, next_states)]
+
+        # Prune the bottom 4/5 of nodes by score
+        nodes.sort(key=lambda node: node.score, reverse=True)
+        if len(nodes) > 10:
+            nodes = nodes[:len(nodes) / 5]
+
+        # If the depth limit hasn't been reached,
+        # analyze each subnode.
+        if depth_limit >= 1:
             for node in nodes:
-                new_node = node
-                if max_score == 0.0:
-                    new_node = self.recursion_in_python_is_bad(
-                        node.state, depth_left - 1)
-                elif node.score > max_score:
-                    max_score = node.score
-                    new_node = self.recursion_in_python_is_bad(
-                        node.state, depth_left - 1)
-                if new_node.score > node.score:
-                    node.score = new_node.score
-                if max_score > 0.7:
-                    break
+                # Set the node's score to the best score of its subnodes.
+                best_node = self.analyze_sub_nodes(node.state, depth_limit - 1)
+                node.score = best_node.score
+                # If we have a good move, the just use it.
+                if node.score > 0.7:
+                    return node
 
         # Prevent the ants form getting stuck when all moves
         # are equal.
         random.shuffle(nodes)
 
-        best_node = self.evaluate_nodes(nodes)
-
-        if best_node.score <= 0.01:
-            return Node(Move(c.END, None, None), state, 0.01)
-
-        return best_node
+        # Return the best node.
+        return self.evaluate_nodes(nodes)
 
     def getPlacement(self, currentState):
         """
@@ -358,22 +401,11 @@ class AIPlayer(Player):
                      coordList [list of 2-tuples of ints],
                      buildType [int])
         """
-        # moves = utils.listAllLegalMoves(currentState)
-        # selectedMove = moves[random.randint(0, len(moves) - 1)]
 
-        # # don't do a build move if there are already 3+ ants
-        # numAnts = len(currentState.inventories[currentState.whoseTurn].ants)
-        # while (selectedMove.moveType == c.BUILD and numAnts >= 3):
-        #     selectedMove = moves[random.randint(0, len(moves) - 1)]
+        depth = 2
+        move = self.get_best_move(currentState, depth)
 
-        # print self.score_state(currentState)
-        # print self.recursion_in_python_is_bad(currentState, 1).score
-        depth = 1
-        node = self.recursion_in_python_is_bad(currentState, depth)
-
-        print "Current: {}, next node: {}".format(self.score_state(currentState), node.score)
-
-        return node.move
+        return move
 
     def getAttack(self, currentState, attackingAnt, enemyLocations):
         """
@@ -393,10 +425,109 @@ class AIPlayer(Player):
         # Attack a random enemy.
         return enemyLocations[random.randint(0, len(enemyLocations) - 1)]
 
+    @staticmethod
+    def getNextState(currentState, move):
+        """
+        Version of genNextState with food carrying bug fixed.
+        """
+        # variables I will need
+        myGameState = currentState.fastclone()
+        myInv = utils.getCurrPlayerInventory(myGameState)
+        me = myGameState.whoseTurn
+        myAnts = myInv.ants
+
+        # If enemy ant is on my anthill or tunnel update capture health
+        myTunnels = myInv.getTunnels()
+        myAntHill = myInv.getAnthill()
+        for myTunnel in myTunnels:
+            ant = utils.getAntAt(myGameState, myTunnel.coords)
+            if ant is not None:
+                opponentsAnts = myGameState.inventories[not me].ants
+                if ant in opponentsAnts:
+                    myTunnel.captureHealth -= 1
+        if utils.getAntAt(myGameState, myAntHill.coords) is not None:
+            ant = utils.getAntAt(myGameState, myAntHill.coords)
+            opponentsAnts = myGameState.inventories[not me].ants
+            if ant in opponentsAnts:
+                myAntHill.captureHealth -= 1
+
+        # If an ant is built update list of ants
+        antTypes = [c.WORKER, c.DRONE, c.SOLDIER, c.R_SOLDIER]
+        if move.moveType == c.BUILD:
+            if move.buildType in antTypes:
+                ant = Ant(myInv.getAnthill().coords, move.buildType, me)
+                myInv.ants.append(ant)
+                # Update food count depending on ant built
+                if move.buildType == c.WORKER:
+                    myInv.foodCount -= 1
+                elif move.buildType == c.DRONE or move.buildType == c.R_SOLDIER:
+                    myInv.foodCount -= 2
+                elif move.buildType == c.SOLDIER:
+                    myInv.foodCount -= 3
+
+        # If a building is built update list of buildings and the update food
+        # count
+        if move.moveType == c.BUILD:
+            if move.buildType == c.TUNNEL:
+                building = Construction(move.coordList[0], move.buildType)
+                myInv.constrs.append(building)
+                myInv.foodCount -= 3
+
+        # If an ant is moved update their coordinates and has moved
+        if move.moveType == c.MOVE_ANT:
+            newCoord = move.coordList[len(move.coordList) - 1]
+            startingCoord = move.coordList[0]
+            for ant in myAnts:
+                if ant.coords == startingCoord:
+                    ant.coords = newCoord
+                    ant.hasMoved = False
+                    # If an ant is carrying food and ends on the anthill or tunnel
+                    # drop the food
+                    if ant.carrying and ant.coords == myInv.getAnthill().coords:
+                        myInv.foodCount += 1
+                        # ant.carrying = False
+                    for tunnels in myTunnels:
+                        if ant.carrying and (ant.coords == tunnels.coords):
+                            myInv.foodCount += 1
+                            # ant.carrying = False
+                    # If an ant doesn't have food and ends on the food grab
+                    # food
+                    if not ant.carrying:
+                        foods = utils.getConstrList(
+                            myGameState, None, (c.FOOD,))
+                        for food in foods:
+                            if food.coords == ant.coords:
+                                ant.carrying = True
+                    # If my ant is close to an enemy ant attack it
+                    adjacentTiles = utils.listAdjacent(ant.coords)
+                    for adj in adjacentTiles:
+                        # If ant is adjacent my ant
+                        if utils.getAntAt(myGameState, adj) is not None:
+                            closeAnt = utils.getAntAt(myGameState, adj)
+                            if closeAnt.player != me:  # if the ant is not me
+                                closeAnt.health = closeAnt.health - \
+                                    UNIT_STATS[ant.type][c.ATTACK]  # attack
+                                # If an enemy is attacked and looses all its health remove it from the other players
+                                # inventory
+                                if closeAnt.health <= 0:
+                                    enemyAnts = myGameState.inventories[
+                                        not me].ants
+                                    for enemy in enemyAnts:
+                                        if closeAnt.coords == enemy.coords:
+                                            myGameState.inventories[
+                                                not me].ants.remove(enemy)
+                                # If attacked an ant already don't attack any
+                                # more
+                                break
+        return myGameState
+
 
 class Node(object):
     """
     Simple class for a search tree Node.
+
+    Each Node requires a Move and a GameState. If a score is not
+    provided, then one is calculated with AIPlayer.score_state().
     """
 
     __slots__ = ('move', 'state', 'score', 'parent')
@@ -407,4 +538,12 @@ class Node(object):
         self.score = score
         if score is None:
             self.score = AIPlayer.score_state(state)
-        self.parent = None
+        self.parent = parent
+        # if parent is not None:
+        #     self.update_parent_score()
+
+    # def update_parent_score(self):
+    #     parent = self.parent
+    #     while parent is not None:
+    #         parent.score = max(self.score, parent.score)
+    #         parent = parent.parent
