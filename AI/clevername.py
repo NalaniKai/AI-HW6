@@ -10,7 +10,9 @@ from Ant import UNIT_STATS, Ant
 from Move import Move
 from GameState import addCoords, subtractCoords, GameState
 import AIPlayerUtils as utils
-
+import unittest
+from Location import Location 
+from Inventory import Inventory
 
 class AIPlayer(Player):
     """
@@ -73,12 +75,12 @@ class AIPlayer(Player):
         # enemy_id = abs(self.playerId - 1)
 
         # Initial win condition checks:
-        if (our_food == 11 or
+        if (our_food == c.FOOD_GOAL or
             enemy_queen is None or
                 enemy_anthill.captureHealth == 0):
             return we_win
         # Initial lose condition checks:
-        if (enemy_food == 11 or
+        if (enemy_food == c.FOOD_GOAL or
             our_queen is None or
                 our_anthill.captureHealth == 0):
             return enemy_win
@@ -545,3 +547,24 @@ class Node(object):
         if score is None:
             self.score = AIPlayer.score_state(state)
         self.parent = parent
+
+class Unit_Tests(unittest.TestCase):
+
+    def test_one(self):
+        a = AIPlayer(0)
+        board = [[Location((col, row)) for row in xrange(0,c.BOARD_LENGTH)] for col in xrange(0,c.BOARD_LENGTH)]
+        p1Inventory = Inventory(c.PLAYER_ONE, [], [], 0)
+        p2Inventory = Inventory(c.PLAYER_TWO, [], [], 0)
+        neutralInventory = Inventory(c.NEUTRAL, [], [], 0)
+        
+        self.state = GameState(board, [p1Inventory, p2Inventory, neutralInventory], c.SETUP_PHASE_1, c.PLAYER_ONE)
+        p1Inventory = a.getPlacement(self.state)
+        self.state.flipBoard()
+        #self.failIf(a.getNextState(self, self.state))
+
+def main():
+    unittest.main()
+
+if __name__ == '__main__':
+    main()
+
