@@ -203,7 +203,7 @@ class AIPlayer(Player):
 
         # Stop building if we have more than 5 ants
         if len(our_inv.ants) > 5:
-            return .001
+            total_points += 300 #return .001
 
         # Queen stuff
         # Queen healths, big deal, each HP is worth 100!
@@ -213,7 +213,7 @@ class AIPlayer(Player):
         if queen_coords in food_drop_offs or queen_coords[1] > 2:
             # Stay off food_drop_offs and away from the front lines.
             return .001
-            # total_points += 500000
+            #total_points += 300
 
         # queen attacks if under threat
         for enemy_ant in enemy_inv.ants:
@@ -603,8 +603,7 @@ class Unit_Tests(unittest.TestCase):
         #change to play phase
         state.phase = c.PLAY_PHASE
 
-    def create_state(self):
-        ai = AIPlayer(0)
+    def create_state(self, ai):
         self.state = self.setup_state()
         players = [c.PLAYER_ONE, c.PLAYER_TWO]
 
@@ -637,15 +636,45 @@ class Unit_Tests(unittest.TestCase):
             self.state.flipBoard()
 
         self.setup_play(self.state)
+        self.state.whoseTurn = c.PLAYER_ONE
         return self.state
         
         #self.failIf(a.getNextState(self, self.state))
 
-    def test_one(self):
-        self.state = self.create_state()
-        
-        
-        #self.failIf(a.getNextState(self, self.state))
+    def test_score_state(self):
+        ai = AIPlayer(0)
+        self.state = self.create_state(ai)
+        score = ai.score_state(self.state)
+        self.failIf(score > 0.5)
+
+    def test_getNextState(self):
+        ai = AIPlayer(0)
+        self.state = self.create_state(ai)
+        move = utils.listAllLegalMoves(self.state)[0]
+        next_state = ai.getNextState(self.state, move)
+        self.assertTrue(next_state.whoseTurn == self.state.whoseTurn)
+    
+    def test_evaluate_nodes(self):
+        ai = AIPlayer(0)
+        self.state = self.create_state(ai)
+        nodes = []
+        all_moves = [move for move in utils.listAllLegalMoves(
+                self.state) if move.moveType != c.END]
+
+        next_states = [ai.getNextState(self.state, move)
+                       for move in all_moves]
+
+        nodes = [Node(move, self.state)
+                 for move, self.state in zip(all_moves, next_states)]
+
+        best = ai.evaluate_nodes(nodes)
+        self.failIf(best.score < 0.4)
+
+    def test_get_best_move(self):
+        ai = AIPlayer(0)
+        self.state = self.create_state(ai)
+        move = ai.get_best_move(self.state, 1)
+        self.assertTrue(len(move.coordList) > 0)
 
 def main():
     unittest.main()
