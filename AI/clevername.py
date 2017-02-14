@@ -551,6 +551,60 @@ class Node(object):
 
 class Unit_Tests(unittest.TestCase):
 
+    def test_node_class(self):
+        ai = AIPlayer(0)
+        self.state = self.create_state(ai)
+        move = utils.listAllLegalMoves(self.state)[0]
+        node = Node(move, self.state);
+        self.failIf(node.move is not move)
+
+    def test_getNextState(self):
+        ai = AIPlayer(0)
+        self.state = self.create_state(ai)
+        move = utils.listAllLegalMoves(self.state)[0]
+        next_state = ai.getNextState(self.state, move)
+        self.assertTrue(type(next_state) is GameState)
+
+    def test_getMove(self):
+        ai = AIPlayer(0)
+        self.state = self.create_state(ai)
+        move = ai.getMove(self.state)
+        self.assertTrue(type(move) is Move)
+
+    def test_analyze_subnodes(self):
+        ai = AIPlayer(0)
+        self.state = self.create_state(ai)
+        best = ai.analyze_subnodes(self.state, 2)
+        self.failIf(type(best.score) is not float)
+
+    def test_get_best_move(self):
+        ai = AIPlayer(0)
+        self.state = self.create_state(ai)
+        move = ai.get_best_move(self.state, 1)
+        self.assertTrue(type(move) is Move)
+
+    def test_evaluate_nodes(self):
+        ai = AIPlayer(0)
+        self.state = self.create_state(ai)
+        nodes = []
+        all_moves = [move for move in utils.listAllLegalMoves(
+                self.state) if move.moveType != c.END]
+
+        next_states = [ai.getNextState(self.state, move)
+                       for move in all_moves]
+
+        nodes = [Node(move, self.state)
+                 for move, self.state in zip(all_moves, next_states)]
+
+        best = ai.evaluate_nodes(nodes)
+        self.failIf(type(best.score) is not float)
+
+    def test_score_state(self):
+        ai = AIPlayer(0)
+        self.state = self.create_state(ai)
+        score = ai.score_state(self.state)
+        self.failIf(type(score) is not float)
+
     def setup_state(self):
         board = [[Location((col, row)) for row in xrange(0,c.BOARD_LENGTH)] for col in xrange(0,c.BOARD_LENGTH)]
         p1Inventory = Inventory(c.PLAYER_ONE, [], [], 0)
@@ -638,43 +692,7 @@ class Unit_Tests(unittest.TestCase):
         self.setup_play(self.state)
         self.state.whoseTurn = c.PLAYER_ONE
         return self.state
-        
-        #self.failIf(a.getNextState(self, self.state))
 
-    def test_score_state(self):
-        ai = AIPlayer(0)
-        self.state = self.create_state(ai)
-        score = ai.score_state(self.state)
-        self.failIf(score > 0.5)
-
-    def test_getNextState(self):
-        ai = AIPlayer(0)
-        self.state = self.create_state(ai)
-        move = utils.listAllLegalMoves(self.state)[0]
-        next_state = ai.getNextState(self.state, move)
-        self.assertTrue(next_state.whoseTurn == self.state.whoseTurn)
-    
-    def test_evaluate_nodes(self):
-        ai = AIPlayer(0)
-        self.state = self.create_state(ai)
-        nodes = []
-        all_moves = [move for move in utils.listAllLegalMoves(
-                self.state) if move.moveType != c.END]
-
-        next_states = [ai.getNextState(self.state, move)
-                       for move in all_moves]
-
-        nodes = [Node(move, self.state)
-                 for move, self.state in zip(all_moves, next_states)]
-
-        best = ai.evaluate_nodes(nodes)
-        self.failIf(best.score < 0.4)
-
-    def test_get_best_move(self):
-        ai = AIPlayer(0)
-        self.state = self.create_state(ai)
-        move = ai.get_best_move(self.state, 1)
-        self.assertTrue(len(move.coordList) > 0)
 
 def main():
     unittest.main()
