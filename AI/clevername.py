@@ -603,7 +603,7 @@ class Unit_Tests(unittest.TestCase):
         #change to play phase
         state.phase = c.PLAY_PHASE
 
-    def test_one(self):
+    def create_state(self):
         ai = AIPlayer(0)
         self.state = self.setup_state()
         players = [c.PLAYER_ONE, c.PLAYER_TWO]
@@ -637,6 +637,13 @@ class Unit_Tests(unittest.TestCase):
             self.state.flipBoard()
 
         self.setup_play(self.state)
+        return self.state
+        
+        #self.failIf(a.getNextState(self, self.state))
+
+    def test_one(self):
+        self.state = self.create_state()
+        
         
         #self.failIf(a.getNextState(self, self.state))
 
