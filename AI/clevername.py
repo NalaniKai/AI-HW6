@@ -551,14 +551,61 @@ class Node(object):
 
 class Unit_Tests(unittest.TestCase):
 
-    def test_one(self):
-        ai = AIPlayer(0)
+    def setup_state(self):
         board = [[Location((col, row)) for row in xrange(0,c.BOARD_LENGTH)] for col in xrange(0,c.BOARD_LENGTH)]
         p1Inventory = Inventory(c.PLAYER_ONE, [], [], 0)
         p2Inventory = Inventory(c.PLAYER_TWO, [], [], 0)
         neutralInventory = Inventory(c.NEUTRAL, [], [], 0)
-        self.state = GameState(board, [p1Inventory, p2Inventory, neutralInventory], c.SETUP_PHASE_1, c.PLAYER_ONE)
+        return GameState(board, [p1Inventory, p2Inventory, neutralInventory], c.SETUP_PHASE_1, c.PLAYER_ONE)
 
+    def place_items(self, piece, constrsToPlace, state):
+        #translate coords to match player
+        piece = state.coordLookup(piece, state.whoseTurn)
+        #get construction to place
+        constr = constrsToPlace.pop(0)
+        #give constr its coords
+        constr.coords = piece
+        #put constr on board
+        state.board[piece[0]][piece[1]].constr = constr
+        if constr.type == c.ANTHILL or constr.type == c.TUNNEL:
+            #update the inventory
+            state.inventories[state.whoseTurn].constrs.append(constr)
+        else:  #grass and food
+            state.inventories[c.NEUTRAL].constrs.append(constr)
+
+    def setup_play(self, state):
+        p1inventory = state.inventories[c.PLAYER_ONE]
+        p2inventory = state.inventories[c.PLAYER_TWO]
+        #get anthill coords
+        p1AnthillCoords = p1inventory.constrs[0].coords
+        p2AnthillCoords = p2inventory.constrs[0].coords
+        #get tunnel coords
+        p1TunnelCoords = p1inventory.constrs[1].coords
+        p2TunnelCoords = p2inventory.constrs[1].coords
+        #create queen and worker ants
+        p1Queen = Ant(p1AnthillCoords, c.QUEEN, c.PLAYER_ONE)
+        p2Queen = Ant(p2AnthillCoords, c.QUEEN, c.PLAYER_TWO)
+        p1Worker = Ant(p1TunnelCoords, c.WORKER, c.PLAYER_ONE)
+        p2Worker = Ant(p2TunnelCoords, c.WORKER, c.PLAYER_TWO)
+        #put ants on board
+        state.board[p1Queen.coords[0]][p1Queen.coords[1]].ant = p1Queen
+        state.board[p2Queen.coords[0]][p2Queen.coords[1]].ant = p2Queen
+        state.board[p1Worker.coords[0]][p1Worker.coords[1]].ant = p1Worker
+        state.board[p2Worker.coords[0]][p2Worker.coords[1]].ant = p2Worker
+        #add the queens to the inventories
+        p1inventory.ants.append(p1Queen)
+        p2inventory.ants.append(p2Queen)
+        p1inventory.ants.append(p1Worker)
+        p2inventory.ants.append(p2Worker)
+        #give the players the initial food
+        p1inventory.foodCount = 1
+        p2inventory.foodCount = 1
+        #change to play phase
+        state.phase = c.PLAY_PHASE
+
+    def test_one(self):
+        ai = AIPlayer(0)
+        self.state = self.setup_state()
         players = [c.PLAYER_ONE, c.PLAYER_TWO]
 
         for player in players:
@@ -567,24 +614,11 @@ class Unit_Tests(unittest.TestCase):
             constrsToPlace += [Building(None, c.ANTHILL, player)]
             constrsToPlace += [Building(None, c.TUNNEL, player)]
             constrsToPlace += [Construction(None, c.GRASS) for i in xrange(0,9)]
-            
+
             setup = ai.getPlacement(self.state)
-            print(setup)
 
             for piece in setup:
-                #translate coords to match player
-                piece = self.state.coordLookup(piece, self.state.whoseTurn)
-                #get construction to place
-                constr = constrsToPlace.pop(0)
-                #give constr its coords
-                constr.coords = piece
-                #put constr on board
-                self.state.board[piece[0]][piece[1]].constr = constr
-                if constr.type == c.ANTHILL or constr.type == c.TUNNEL:
-                    #update the inventory
-                    self.state.inventories[self.state.whoseTurn].constrs.append(constr)
-                else:  #grass and food
-                    self.state.inventories[c.NEUTRAL].constrs.append(constr)
+                self.place_items(piece, constrsToPlace, self.state)
 
             self.state.flipBoard()
 
@@ -596,25 +630,13 @@ class Unit_Tests(unittest.TestCase):
             constrsToPlace += [Construction(None, c.FOOD) for i in xrange(0,2)]
 
             setup = ai.getPlacement(self.state)
-            print(setup)
 
             for food in setup:
-                #translate coords to match player
-                piece = self.state.coordLookup(piece, self.state.whoseTurn)
-                #get construction to place
-                constr = constrsToPlace.pop(0)
-                #give constr its coords
-                constr.coords = piece
-                #put constr on board
-                self.state.board[piece[0]][piece[1]].constr = constr
-                if constr.type == c.ANTHILL or constr.type == c.TUNNEL:
-                    #update the inventory
-                    self.state.inventories[self.state.whoseTurn].constrs.append(constr)
-                else:  #grass and food
-                    self.state.inventories[c.NEUTRAL].constrs.append(constr)
+                self.place_items(food, constrsToPlace, self.state)
 
             self.state.flipBoard()
 
+        self.setup_play(self.state)
         
         #self.failIf(a.getNextState(self, self.state))
 
