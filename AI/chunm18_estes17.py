@@ -1,6 +1,6 @@
 import random
 import sys
-import math
+import math as math
 from os import path
 sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))  # nopep8
 from Player import Player
@@ -33,10 +33,21 @@ class AIPlayer(Player):
         Parameters:
             inputPlayerId - The id to give the new player (int)
         """
-        super(AIPlayer, self).__init__(inputPlayerId, "Clever Name")
+        super(AIPlayer, self).__init__(inputPlayerId, "Clever")
+        self.sum_in = 0
+        self.network_inputs = []
+        self.network_weights = []
+        self.bias = 1
+        self.bias_weight = 1
+        self.dLim = 3               #depth limit
+        self.searchMult = 2.5       #generate search limits for depths
+        self.searchLim = []         #search limit size control
+        for i in range(self.dLim+1):
+            self.searchLim.append((i)*self.searchMult)
+            
 
-    @staticmethod
-    def score_state(state):
+    #@staticmethod
+    def score_state(self, state):
         """
         score_state: Compute a 'goodness' score of a given state for the current player.
         The score is computed by tallying up a total number of possible 'points',
@@ -51,22 +62,24 @@ class AIPlayer(Player):
         Parameters:
             state - GameState to score.
         """
-        enemy_id = abs(state.whoseTurn - 1)
-        our_inv = utils.getCurrPlayerInventory(state)
-        enemy_inv = [
-            inv for inv in state.inventories if inv.player == enemy_id].pop()
+        enemy_id = 1 - self.playerId 
+        our_inv = state.inventories[self.playerId]
+        enemy_inv = [inv for inv in state.inventories if inv.player == enemy_id].pop()
         we_win = 1.0
         enemy_win = 0.0
         our_food = our_inv.foodCount
         enemy_food = enemy_inv.foodCount
         food_difference = abs(our_food - enemy_food)
         our_anthill = our_inv.getAnthill()
-        our_tunnel = our_inv.getTunnels()[0]
+        our_tunnel = our_inv.getTunnels()
+        food_drop_offs = []
+        if len(our_tunnel) != 0:
+            food_drop_offs.append(our_tunnel[0].coords)
+        food_drop_offs.append(our_anthill.coords)
         enemy_anthill = enemy_inv.getAnthill()
         our_queen = our_inv.getQueen()
         enemy_queen = enemy_inv.getQueen()
-        food_drop_offs = [our_tunnel.coords]
-        food_drop_offs.append(our_anthill.coords)
+        food = utils.getConstrList(state, None, (c.FOOD,))
 
         # Total points possible
         total_points = 1
@@ -85,17 +98,17 @@ class AIPlayer(Player):
             return enemy_win
 
         # Score food
-        total_points += (our_food + enemy_food) * 50  # 100
-        good_points += our_food * 50  # 100
+        total_points += (our_food + enemy_food) * 50  
+        good_points += our_food * 50  
 
         # Differences over, say, 3 are weighted heavier
         if food_difference > 3:
-            total_points += food_difference * 200  # 800
+            total_points += food_difference * 100  
             if our_food > enemy_food:
-                good_points += food_difference * 200  # 800
+                good_points += food_difference * 100  
 
         # Carrying food is good
-        food_move = 100
+        food_move = 150
         our_workers = [ant for ant in our_inv.ants if ant.type == c.WORKER]
 
         # Food drop off points
@@ -104,8 +117,15 @@ class AIPlayer(Player):
 
         # Depositing food is even better!
         if len(dropping_off) != 0:
-            total_points += food_move * 30  
-            good_points += food_move * 30  
+            total_points += food_move * 80  
+            good_points += food_move * 80  
+
+        picking_up = [
+            ant for ant in our_workers if ant.coords in food]
+
+        if len(picking_up) != 0:
+            total_points += food_move * 50  
+            good_points += food_move * 50  
 
         # Worker movement
         for ant in our_workers:
@@ -114,19 +134,34 @@ class AIPlayer(Player):
             for enemy in enemy_inv.ants:
                 if ((abs(ant_x - enemy.coords[0]) > 3) and
                         (abs(ant_y - enemy.coords[1]) > 3)):
-                    good_points += 60 
-                    total_points += 60  
+                    good_points += 30 
+                    total_points += 30  
             if ant.carrying and ant not in dropping_off:
                 # Good if carrying ants move toward a drop off.
-                total_points += food_move  
+                total_points += food_move 
                 good_points += food_move 
 
-                for dist in range(2, 4):
+                for dist in range(2, 6):
                     for dropoff in food_drop_offs:
                         if ((abs(ant_x - dropoff[0]) < dist) and
                                 (abs(ant_y - dropoff[1]) < dist)):
                             good_points += food_move - (dist * 25)
                             total_points += food_move - (dist * 25)
+            else:
+                if food != []:      
+                    for f in food:  
+                        x_dist = abs(ant_x - f.coords[0])
+                        y_dist = abs(ant_y - f.coords[1]) 
+
+                        # weighted more if closer to food
+                        for dist in range(2, 7):
+                            if x_dist < dist and y_dist < dist:
+                                good_points += 70 - (dist * 10)
+                                total_points += 70 - (dist * 10)
+
+        if len(our_workers) < 3:
+            good_points += 800
+            total_points += 800
 
         # Raw ant numbers comparison
         total_points += (len(our_inv.ants) + len(enemy_inv.ants)) * 10  
@@ -157,9 +192,18 @@ class AIPlayer(Player):
         for ant in our_offense:
             ant_x = ant.coords[0]
             ant_y = ant.coords[1]
-            attack_move = 160  
+            attack_move = 150  
             good_points += UNIT_STATS[ant.type][c.COST] * 20
             total_points += UNIT_STATS[ant.type][c.COST] * 20
+
+            if ant.type == c.R_SOLDIER:
+                good_points += 300
+                total_points += 300
+
+            if ant.type == c.DRONE:
+                good_points -= UNIT_STATS[ant.type][c.COST] * 20
+                total_points -= UNIT_STATS[ant.type][c.COST] * 20
+            
             # good if on enemy anthill
             if ant.coords == enemy_anthill.coords:
                 total_points += 100
@@ -186,17 +230,16 @@ class AIPlayer(Player):
 
         # Stop building if we have more than 5 ants
         if len(our_inv.ants) > 5:
-            total_points += 300 
+            return .001 
 
         # Queen stuff
         # Queen healths, big deal, each HP is worth 100!
         total_points += (our_queen.health + enemy_queen.health) * 100
         good_points += our_queen.health * 100
         queen_coords = our_queen.coords
-        if queen_coords in food_drop_offs or queen_coords[1] > 2:
+        if queen_coords in food_drop_offs or queen_coords[1] > 2 or queen_coords in food:
             # Stay off food_drop_offs and away from the front lines.
-            #return .001
-            total_points += 300
+            total_points += 80
 
         # queen attacks if under threat
         for enemy_ant in enemy_inv.ants:
@@ -206,112 +249,22 @@ class AIPlayer(Player):
             y_dist = abs(queen_coords[1] - enemy_y)
 
             if (x_dist + y_dist) == 1:
-                good_points += 200  
-                total_points += 200 
+                good_points += 100  
+                total_points += 100 
 
         # Anthill stuff
         total_points += (our_anthill.captureHealth +
-                         enemy_anthill.captureHealth) * 200  
-        good_points += our_anthill.captureHealth * 200  
+                         enemy_anthill.captureHealth) * 100  
+        good_points += our_anthill.captureHealth * 100  
 
         return float(good_points) / float(total_points)
 
-    def evaluate_nodes(self, nodes):
+    def evaluate_nodes(self, nodes, agents_turn):
         """Evalute a list of Nodes and returns the best score."""
-        return max(nodes, key=lambda node: node.score)
+        if agents_turn:
+            return max(nodes, key=lambda node: node.score)
 
-    def get_best_move(self, state, depth_limit, moves=None):
-        """
-        get_best_move: Returns the best move for a given state, searching to a given
-        depth limit. Uses score_state() to find how 'good' a certain move is.
-
-        The first depth level is done here, remaining levels are done in
-        analyze_subnodes() recursively.
-
-        Parameters:
-            state - GameState to analyze
-            depth_limit - Depth limit for search
-
-        Returns:
-            Move with the best score.
-        """
-        # If we get a list of moves, just get rid of the END move(s)
-        if moves is None:
-            all_moves = [move for move in utils.listAllLegalMoves(
-                state) if move.moveType != c.END]
-        else:
-            all_moves = [move for move in moves if move.moveType != c.END]
-
-        # If there are moves left, then end the turn.
-        if len(all_moves) == 0:
-            return Move(c.END, None, None)
-            # return Node(Move(c.END, None, None), state, 0.5)
-
-        next_states = [self.getNextState(state, move) for move in all_moves]
-
-        # Build first level of nodes
-        nodes = [Node(move, state)
-                 for move, state in zip(all_moves, next_states)]
-
-        # Analyze the subnodes for this state. nodes is modified in-place.
-        best_node = self.analyze_subnodes(state, depth_limit - 1, nodes=nodes)
-
-        # If every move is bad, then just end the turn.
-        if best_node.score <= 0.01:
-            return Move(c.END, None, None)
-
-        return best_node.move
-
-    def analyze_subnodes(self, state, depth_limit, nodes=None):
-        """
-        analyze_subnodes: This is the recursive method. Function stack beware.
-
-        Analyze each subnode of a given state to a given depth limit.
-        Update each node's score and return the highest-scoring subnode.
-
-        Parameters:
-            state - GameState to analyze
-            depth_limit - Depth limit for search
-            nodes (optional) - List of subnodes. Used if first depth
-                level is computed elsewhere (in get_best_move)
-
-        Returns:
-            Best scoring analyzed sub-node.
-        """
-        # If nodes haven't been passed, then expand the current
-        # state's subnodes.
-        if nodes is None:
-            all_moves = [move for move in utils.listAllLegalMoves(
-                state) if move.moveType != c.END]
-
-            next_states = [self.getNextState(state, move)
-                           for move in all_moves]
-
-            nodes = [Node(move, state)
-                     for move, state in zip(all_moves, next_states)]
-
-        # Prune the bottom 4/5 of nodes by score
-        nodes.sort(key=lambda node: node.score, reverse=True)
-        if len(nodes) > 10:
-            nodes = nodes[:len(nodes) / 5]
-
-        # If the depth limit hasn't been reached,
-        # analyze each subnode.
-        if depth_limit >= 1:
-            for node in nodes:
-                # Set the node's score to the best score of its subnodes.
-                best_node = self.analyze_subnodes(node.state, depth_limit - 1)
-                node.score = best_node.score
-                # If we have a good move, the just use it.
-                if node.score > 0.7:
-                    return node
-
-        # Prevent the ants form getting stuck when all moves
-        # are equal.
-        random.shuffle(nodes)
-
-        # Return the best node.
-        return self.evaluate_nodes(nodes)
+        return min(nodes, key=lambda node: node.score)
 
     def getPlacement(self, currentState):
         """
@@ -378,6 +331,23 @@ class AIPlayer(Player):
         else:
             return [(0, 0)]
 
+    def adjust_weights(self, target, actual):
+        """
+        Description: Back propagates through the neural network to 
+                     adjust weights.
+
+        Parameters:  
+            target - the output of the neural network
+            actual - the output of the eval function score_state
+        """
+        error = target - actual
+
+        for x in range(0, len(self.network_inputs)):
+            self.network_weights[x] = self.network_weights[x] + (error * self.calc_g() * (1-self.calc_g()) * self.network_inputs[x])
+
+    def calc_g(self):
+        return 1 / (1 + math.exp(self.sum_in*-1))
+
     def getMove(self, currentState):
         """
         Description:
@@ -392,8 +362,13 @@ class AIPlayer(Player):
                      buildType [int])
         """
 
-        depth = 2
-        move = self.get_best_move(currentState, depth)
+        node = Node(None, currentState)
+        node.beta = -2
+        node.alpha = 2
+        move = self.expand(node, self.dLim, True, -2,2)
+
+        if move is None:
+            return Move(c.END, None, None)
 
         return move
 
@@ -415,11 +390,217 @@ class AIPlayer(Player):
         # Attack a random enemy.
         return enemyLocations[random.randint(0, len(enemyLocations) - 1)]
 
+    def neural_network(self, currentState):
+        """
+        Description:
+            Fills in inputs to neural network and weights if none have been set. Calculates the 
+            output for the neural network.
+
+        Parameters:
+            currentState - the game state being looked at
+
+        Return:
+            output value of the neural network
+        """
+        self.fill_inputs(currentState)          #fill in inputs to neural network
+
+        if(len(self.network_weights) != len(self.network_inputs)): #fill in random weights if none
+            for x in range(0, abs(len(self.network_weights) - len(self.network_inputs))):
+                val = 0
+                while val != 0:
+                    val = random()
+                self.network_weights.append(val)
+
+        self.sum_in = 0
+
+        for x in range(0, len(self.network_inputs)): #getting sum in for node
+            self.sum_in = self.network_inputs[x]*self.network_weights[x]
+
+        return self.calc_g()
+
+    def fill_inputs(self, currentState):
+        self.network_inputs[:]
+        current_input = 0
+
+        for x in range(0,2):
+            if(x == 0):
+                player = self.playerId
+            else:
+                player = 1 - self.playerId
+
+            for y in range(0,17):
+                inv = currentState.inventories[player]
+                food = inv.foodCount
+                anthill = inv.getAnthill()
+                queen = inv.getQueen()
+                workers = [ant for ant in inv.ants if ant.type == c.WORKER]
+                offensive = [c.SOLDIER, c.R_SOLDIER, c.DRONE]
+                attackers = [ant for ant in inv.ants if ant.type in offensive]
+
+                self.food_health_inputs(food, 3, 6)
+                self.food_health_inputs(queen.health, 3, 6)
+                self.food_health_inputs(anthill.captureHealth, 1, 2)
+
+                self.ant_inputs(len(workers), 0, 1, 3)
+                self.ant_inputs(len(attackers), 0, 1, 3)
+
+    def ant_inputs(self, obj, val1, val2, val3):
+        if(obj <= val1):
+            self.insert_inputs(3, [1,0,0,0])
+        elif(obj <= val2):
+            self.insert_inputs(3, [0,1,0,0])
+        elif(obj <= val3):
+            self.insert_inputs(3, [0,0,1,0])
+        else:
+            self.insert_inputs(3, [0,0,0,1]) 
+
+    def food_health_inputs(self, obj, val1, val2):
+        if(obj <= val1):
+            self.insert_inputs(3, [1,0,0])
+        elif(obj <= val2):
+            self.insert_inputs(3, [0,1,0])
+        else:
+            self.insert_inputs(3, [0,0,1])
+
+    def insert_inputs(self, size, vals):
+        for x in range(0, size):
+            self.network_inputs.append(vals[x])
+
+    def expand(self, node, depth, maxPlayer, a, b):
+        '''
+        Description: Recursive method that searches for the best move to optimize resulting state at given depth
+        prunes moves and general search space to save time
+        
+        Parameters:
+           state - current state of the game
+           depth - starting depth for search
+        
+        Return: overall score of nodes if the depth is greater than 0
+        else, when depth is 0, returns the best move
+        '''
+
+        # if depth = 0 or node is terminal return heuristic
+        if depth == 0:
+            node.score = self.score_state(node.nextState)
+            return node.score
+        
+        #get all possible moves for the current player
+        moves = utils.listAllLegalMoves(node.nextState)
+
+        badmoves = []
+        for i in moves:
+            if (i.moveType == c.BUILD and i.buildType == c.TUNNEL) or \
+               (i.moveType == c.MOVE_ANT and not utils.isPathOkForQueen(i.coordList) and\
+                utils.getAntAt(node.nextState, i.coordList[0]).type == c.WORKER):
+                badmoves.append(i)
+        for m in badmoves:
+            moves.remove(m)
+            
+        # prune moves randomly
+        random.shuffle(moves)
+        moves = moves[0:(len(moves)*depth)/self.dLim]
+        
+        #generate a list of all next game states
+        gameStates = []
+        for m in moves:
+            gameStates.append(self.getNextStateAdversarial(node.nextState,m))
+
+        childrentemp = []
+        children = []
+        print(len(gameStates))
+        for n in range(len(gameStates)):
+            score = self.score_state(gameStates[n])
+            network_score = self.neural_network(gameStates[n]) #call neural network
+            print("Network score: " + str(network_score))
+            print("Eval Ftn score: " + str(score))
+            if(abs(score - network_score) > .03):
+                self.adjust_weights(score, network_score)
+            childrentemp.append([score,Node(moves[n], gameStates[n], score, node)])
+
+        childrentemp = sorted(childrentemp, key=lambda x: x[0])
+        if self.playerId == node.nextState.whoseTurn:
+            childrentemp = reversed(childrentemp)
+        for n in childrentemp:
+            if len(children) >= self.searchLim[depth]:
+                break
+            children.append(n[1])
+        random.shuffle(children)
+
+        # if depth = 0 or node is terminal return heuristic
+        if len(children) == 0:
+            node.score = self.score_state(node.nextState)
+            return node.score
+
+        if maxPlayer:
+            node.score = -2
+            for child in children:
+                v = self.expand(child, depth - 1, child.nextState.whoseTurn == self.playerId, a,b)
+                node.score = max(v, node.score)
+                if node.score >= b:
+                    if depth == self.dLim:
+                        return childnode.move
+                    return node.score
+                a = max(a, child.score)
+            if depth == self.dLim:
+                return self.evaluate_nodes(children, True).move
+            return self.evaluate_nodes(children, True).score#node.score
+        else:
+            node.score = 2
+            for child in children:
+                v = self.expand(child, depth - 1, child.nextState.whoseTurn == self.playerId,a,b)
+                node.score = min(v, node.score)
+                if node.score <= a:
+                    return node.score
+                b = min(b, node.score)
+            return self.evaluate_nodes(children, False).score
+
+    def getNextStateAdversarial(self, currentState, move):
+        '''
+        Version of getNextStateAdversarial that calls this class' getNextState
+
+        Description: This is the same as getNextState (above) except that it properly
+        updates the hasMoved property on ants and the END move is processed correctly.
+
+        Parameters:
+        currentState - A clone of the current state (GameState)
+        move - The move that the agent would take (Move)
+        Return: A clone of what the state would look like if the move was made
+        '''
+
+        # variables I will need
+        nextState = self.getNextState(currentState, move)
+        myInv = utils.getCurrPlayerInventory(nextState)
+        myAnts = myInv.ants
+
+        # If an ant is moved update their coordinates and has moved
+        if move.moveType == c.MOVE_ANT:
+            startingCoord = move.coordList[0]
+            for ant in myAnts:
+                if ant.coords == startingCoord:
+                    ant.hasMoved = True
+        elif move.moveType == c.END:
+            for ant in myAnts:
+                ant.hasMoved = False
+            nextState.whoseTurn = 1 - currentState.whoseTurn;
+        return nextState
+
     @staticmethod
     def getNextState(currentState, move):
         """
         Version of genNextState with food carrying bug fixed.
+
+        Description: Creates a copy of the given state and modifies the inventories in
+        it to reflect what they would look like after a given move.  For efficiency,
+        only the inventories are modified and the board is set to None.  The original
+        (given) state is not modified.
+
+        Parameters:
+        currentState - A clone of the current state (GameState)
+        move - The move that the agent would take (Move)
+
+        Return: A clone of what the state would look like if the move was made
         """
+
         # variables I will need
         myGameState = currentState.fastclone()
         myInv = utils.getCurrPlayerInventory(myGameState)
@@ -487,8 +668,10 @@ class AIPlayer(Player):
                             myGameState, None, (c.FOOD,))
                         for food in foods:
                             if food.coords == ant.coords:
-                                ant.carrying = True
+                                ant.carrying = True                        
                     # If my ant is close to an enemy ant attack it
+                    if ant.type == c.WORKER:
+                        continue 
                     adjacentTiles = utils.listAdjacent(ant.coords)
                     for adj in adjacentTiles:
                         # If ant is adjacent my ant
@@ -511,173 +694,21 @@ class AIPlayer(Player):
                                 break
         return myGameState
 
-
-class Node(object):
+##
+#class to represent node containing info for next state given a move
+##
+class Node:
     """
     Simple class for a search tree Node.
 
     Each Node requires a Move and a GameState. If a score is not
     provided, then one is calculated with AIPlayer.score_state().
     """
-
-    __slots__ = ('move', 'state', 'score', 'parent')
-
-    def __init__(self, move, state, score=None, parent=None):
-        self.move = move
-        self.state = state
+    def __init__(self, move = None, nextState = None, score = 0, parent = None, child = None):
+        self.move = move;
+        self.nextState = nextState
         self.score = score
-        if score is None:
-            self.score = AIPlayer.score_state(state)
         self.parent = parent
-
-class Unit_Tests(unittest.TestCase):
-
-    def test_node_class(self):
-        ai = AIPlayer(0)
-        self.state = self.create_state(ai)
-        move = utils.listAllLegalMoves(self.state)[0]
-        node = Node(move, self.state);
-        self.failIf(node.move is not move)
-
-    def test_getNextState(self):
-        ai = AIPlayer(0)
-        self.state = self.create_state(ai)
-        move = utils.listAllLegalMoves(self.state)[0]
-        next_state = ai.getNextState(self.state, move)
-        self.assertTrue(type(next_state) is GameState)
-
-    def test_getMove(self):
-        ai = AIPlayer(0)
-        self.state = self.create_state(ai)
-        move = ai.getMove(self.state)
-        self.assertTrue(type(move) is Move)
-
-    def test_analyze_subnodes(self):
-        ai = AIPlayer(0)
-        self.state = self.create_state(ai)
-        best = ai.analyze_subnodes(self.state, 2)
-        self.failIf(type(best.score) is not float)
-
-    def test_get_best_move(self):
-        ai = AIPlayer(0)
-        self.state = self.create_state(ai)
-        move = ai.get_best_move(self.state, 1)
-        self.assertTrue(type(move) is Move)
-
-    def test_evaluate_nodes(self):
-        ai = AIPlayer(0)
-        self.state = self.create_state(ai)
-        nodes = []
-        all_moves = [move for move in utils.listAllLegalMoves(
-                self.state) if move.moveType != c.END]
-
-        next_states = [ai.getNextState(self.state, move)
-                       for move in all_moves]
-
-        nodes = [Node(move, self.state)
-                 for move, self.state in zip(all_moves, next_states)]
-
-        best = ai.evaluate_nodes(nodes)
-        self.failIf(type(best.score) is not float)
-
-    def test_score_state(self):
-        ai = AIPlayer(0)
-        self.state = self.create_state(ai)
-        score = ai.score_state(self.state)
-        self.failIf(type(score) is not float)
-
-    def setup_state(self):
-        board = [[Location((col, row)) for row in xrange(0,c.BOARD_LENGTH)] for col in xrange(0,c.BOARD_LENGTH)]
-        p1Inventory = Inventory(c.PLAYER_ONE, [], [], 0)
-        p2Inventory = Inventory(c.PLAYER_TWO, [], [], 0)
-        neutralInventory = Inventory(c.NEUTRAL, [], [], 0)
-        return GameState(board, [p1Inventory, p2Inventory, neutralInventory], c.SETUP_PHASE_1, c.PLAYER_ONE)
-
-    def place_items(self, piece, constrsToPlace, state):
-        #translate coords to match player
-        piece = state.coordLookup(piece, state.whoseTurn)
-        #get construction to place
-        constr = constrsToPlace.pop(0)
-        #give constr its coords
-        constr.coords = piece
-        #put constr on board
-        state.board[piece[0]][piece[1]].constr = constr
-        if constr.type == c.ANTHILL or constr.type == c.TUNNEL:
-            #update the inventory
-            state.inventories[state.whoseTurn].constrs.append(constr)
-        else:  #grass and food
-            state.inventories[c.NEUTRAL].constrs.append(constr)
-
-    def setup_play(self, state):
-        p1inventory = state.inventories[c.PLAYER_ONE]
-        p2inventory = state.inventories[c.PLAYER_TWO]
-        #get anthill coords
-        p1AnthillCoords = p1inventory.constrs[0].coords
-        p2AnthillCoords = p2inventory.constrs[0].coords
-        #get tunnel coords
-        p1TunnelCoords = p1inventory.constrs[1].coords
-        p2TunnelCoords = p2inventory.constrs[1].coords
-        #create queen and worker ants
-        p1Queen = Ant(p1AnthillCoords, c.QUEEN, c.PLAYER_ONE)
-        p2Queen = Ant(p2AnthillCoords, c.QUEEN, c.PLAYER_TWO)
-        p1Worker = Ant(p1TunnelCoords, c.WORKER, c.PLAYER_ONE)
-        p2Worker = Ant(p2TunnelCoords, c.WORKER, c.PLAYER_TWO)
-        #put ants on board
-        state.board[p1Queen.coords[0]][p1Queen.coords[1]].ant = p1Queen
-        state.board[p2Queen.coords[0]][p2Queen.coords[1]].ant = p2Queen
-        state.board[p1Worker.coords[0]][p1Worker.coords[1]].ant = p1Worker
-        state.board[p2Worker.coords[0]][p2Worker.coords[1]].ant = p2Worker
-        #add the queens to the inventories
-        p1inventory.ants.append(p1Queen)
-        p2inventory.ants.append(p2Queen)
-        p1inventory.ants.append(p1Worker)
-        p2inventory.ants.append(p2Worker)
-        #give the players the initial food
-        p1inventory.foodCount = 1
-        p2inventory.foodCount = 1
-        #change to play phase
-        state.phase = c.PLAY_PHASE
-
-    def create_state(self, ai):
-        self.state = self.setup_state()
-        players = [c.PLAYER_ONE, c.PLAYER_TWO]
-
-        for player in players:
-            self.state.whoseTurn = player
-            constrsToPlace = []
-            constrsToPlace += [Building(None, c.ANTHILL, player)]
-            constrsToPlace += [Building(None, c.TUNNEL, player)]
-            constrsToPlace += [Construction(None, c.GRASS) for i in xrange(0,9)]
-
-            setup = ai.getPlacement(self.state)
-
-            for piece in setup:
-                self.place_items(piece, constrsToPlace, self.state)
-
-            self.state.flipBoard()
-
-        self.state.phase = c.SETUP_PHASE_2
-
-        for player in players:
-            self.state.whoseTurn = player
-            constrsToPlace = []
-            constrsToPlace += [Construction(None, c.FOOD) for i in xrange(0,2)]
-
-            setup = ai.getPlacement(self.state)
-
-            for food in setup:
-                self.place_items(food, constrsToPlace, self.state)
-
-            self.state.flipBoard()
-
-        self.setup_play(self.state)
-        self.state.whoseTurn = c.PLAYER_ONE
-        return self.state
-
-
-def main():
-    unittest.main()
-
-if __name__ == '__main__':
-    main()
-
+        self.child = child
+        self.beta = None
+        self.alpha = None
