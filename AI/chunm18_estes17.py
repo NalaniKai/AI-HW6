@@ -36,7 +36,7 @@ class AIPlayer(Player):
         """
         super(AIPlayer, self).__init__(inputPlayerId, "Clever")
         self.weights_changed = False
-        self.same_count_limit = 5
+        self.same_count_limit = 20
         self.same_count = 0
         self.sum_in = 0
         self.network_inputs = []
@@ -349,11 +349,8 @@ class AIPlayer(Player):
 
         print("Error: " + str(error))
         #if actual < .5:
-        print("neural net: " + str(actual))
-        print("eval ftn: " + str(target))
-
-        if self.sum_in < 5000 or self.sum_in > 5000:
-            return 
+        #print("neural net: " + str(actual))
+        #print("eval ftn: " + str(target))
 
         delta = error * self.calc_g() * (1-self.calc_g())
 
@@ -363,7 +360,6 @@ class AIPlayer(Player):
                 self.network_weights[x] = output
 
     def calc_g(self):
-        print("sum in: " + str(self.sum_in))
         return 1 / (1 + math.exp(self.sum_in*-1))
 
     def getMove(self, currentState):
@@ -383,11 +379,14 @@ class AIPlayer(Player):
         node = Node(None, currentState)
         node.beta = -2
         node.alpha = 2
+        self.weights_changed = False
         move = self.expand(node, self.dLim, True, -2,2)
         
-        '''if not self.weights_changed:
+        if(not self.weights_changed):
+            print("start")
             for x in range(0, len(self.network_weights)):
-                print(self.network_weights[x])'''
+                print(self.network_weights[x])
+            print("end")
 
         if move is None:
             return Move(c.END, None, None)
@@ -426,12 +425,17 @@ class AIPlayer(Player):
         """
         self.fill_inputs(currentState)          #fill in inputs to neural network
 
+        correct_weights = [-0.0434608835909, 0.575296537021, -0.790157016078, 0.122348581121, 0.439977493331, 0.250992358547, 
+            0.193257595531, 0.608610635316, -0.390652794477, -0.556154410349, -0.62395694781, -0.307086423268, 0.69877574145,
+            -0.314999871549, -0.817079760567, 0.279114055434, 0.285908744918, 0.444895111163, -0.674821787348, 0.196087050865,
+            0.239985502563, 0.766111417156, -0.487673340934, 0.262415516703, -0.567031131381, 0.133685675798, 0.321295510228,
+            0.919735524888, 0.0683224434393, -0.886360727604, 0.273367304087, 0.280371143609, -0.680139242929, 0.274653505746]
         if(len(self.network_weights) != len(self.network_inputs)): #fill in random weights if none
-            for x in range(0, abs(len(self.network_weights) - len(self.network_inputs))):
-                val = 0
+            for x in range(0, len(self.network_inputs)):
+                '''val = 0
                 while val == 0:
-                    val = random.uniform(-1,1)
-                self.network_weights.append(val)
+                    val = random.uniform(-1,1)'''
+                self.network_weights.append(correct_weights[x])
 
         self.sum_in = 0
 
@@ -539,13 +543,12 @@ class AIPlayer(Player):
                 self.adjust_weights(score, network_score)
             else:
                 self.same_count += 1
-                print("Same")
 
-            if(self.same_count > self.same_count_limit):
+            '''if(self.same_count > self.same_count_limit):
                 print("weights start")
                 for x in range(0, len(self.network_weights)):
                     print(self.network_weights[x])
-                print("weights end")
+                print("weights end")'''
             childrentemp.append([score,Node(moves[n], gameStates[n], score, node)])
 
         childrentemp = sorted(childrentemp, key=lambda x: x[0])
