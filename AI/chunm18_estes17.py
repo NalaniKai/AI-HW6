@@ -14,6 +14,7 @@ import unittest
 from Location import Location 
 from Inventory import Inventory
 from Building import Building
+import unittest
 
 class AIPlayer(Player):
     """
@@ -34,6 +35,7 @@ class AIPlayer(Player):
             inputPlayerId - The id to give the new player (int)
         """
         super(AIPlayer, self).__init__(inputPlayerId, "Clever")
+        self.weights_changed = False
         self.sum_in = 0
         self.network_inputs = []
         self.network_weights = []
@@ -331,7 +333,7 @@ class AIPlayer(Player):
         else:
             return [(0, 0)]
 
-    def adjust_weights(self, target, actual):
+    def adjust_weights(self, actual, target):
         """
         Description: Back propagates through the neural network to 
                      adjust weights.
@@ -341,9 +343,15 @@ class AIPlayer(Player):
             actual - the output of the eval function score_state
         """
         error = target - actual
+        print("Error: " + str(error))
+        print("neural net: " + str(target))
+        print("eval ftn: " + str(actual))
+        delta = error * self.calc_g() * (1-self.calc_g())
 
         for x in range(0, len(self.network_inputs)):
-            self.network_weights[x] = self.network_weights[x] + (error * self.calc_g() * (1-self.calc_g()) * self.network_inputs[x])
+            output = self.network_weights[x] + (delta * self.network_inputs[x])
+            if output != 0.0:
+                self.network_weights[x] = output
 
     def calc_g(self):
         return 1 / (1 + math.exp(self.sum_in*-1))
@@ -366,6 +374,10 @@ class AIPlayer(Player):
         node.beta = -2
         node.alpha = 2
         move = self.expand(node, self.dLim, True, -2,2)
+        
+        if not self.weights_changed:
+            for x in range(0, len(self.network_weights)):
+                print(self.network_weights[x])
 
         if move is None:
             return Move(c.END, None, None)
@@ -407,14 +419,14 @@ class AIPlayer(Player):
         if(len(self.network_weights) != len(self.network_inputs)): #fill in random weights if none
             for x in range(0, abs(len(self.network_weights) - len(self.network_inputs))):
                 val = 0
-                while val != 0:
-                    val = random()
+                while val == 0:
+                    val = random.uniform(-1,1)
                 self.network_weights.append(val)
 
         self.sum_in = 0
 
         for x in range(0, len(self.network_inputs)): #getting sum in for node
-            self.sum_in = self.network_inputs[x]*self.network_weights[x]
+            self.sum_in += self.network_inputs[x]*self.network_weights[x]
 
         return self.calc_g()
 
@@ -507,14 +519,14 @@ class AIPlayer(Player):
 
         childrentemp = []
         children = []
-        print(len(gameStates))
         for n in range(len(gameStates)):
-            score = self.score_state(gameStates[n])
+            score = self.score_state(gameStates[n])            #eval ftn
             network_score = self.neural_network(gameStates[n]) #call neural network
-            print("Network score: " + str(network_score))
-            print("Eval Ftn score: " + str(score))
             if(abs(score - network_score) > .03):
+                self.weights_changed = True 
                 self.adjust_weights(score, network_score)
+            else:
+                print("Same")
             childrentemp.append([score,Node(moves[n], gameStates[n], score, node)])
 
         childrentemp = sorted(childrentemp, key=lambda x: x[0])
@@ -712,3 +724,116 @@ class Node:
         self.child = child
         self.beta = None
         self.alpha = None
+
+class Unit_Tests(unittest.TestCase):
+
+    def test_neural_network(self):
+        ai = AIPlayer(0)
+        self.state = self.create_state(ai)
+        output = ai.neural_network(self.state)
+        self.assertTrue(type(output) is float)
+
+    def test_adjust_weights(self):
+        #target - o/p out neural net, actual - o/p of eval ftn
+        ai = AIPlayer(0)
+        self.state = self.create_state(ai)
+        output_neural = ai.neural_network(self.state)
+        output_eval_ftn = ai.score_state(self.state)
+        ai.adjust_weights(output_neural, output_eval_ftn)
+        for x in range(0, len(ai.network_weights)):
+            self.assertTrue(type(ai.network_weights[x]) is float)
+
+    def setup_state(self):
+        board = [[Location((col, row)) for row in xrange(0,c.BOARD_LENGTH)] for col in xrange(0,c.BOARD_LENGTH)]
+        p1Inventory = Inventory(c.PLAYER_ONE, [], [], 0)
+        p2Inventory = Inventory(c.PLAYER_TWO, [], [], 0)
+        neutralInventory = Inventory(c.NEUTRAL, [], [], 0)
+        return GameState(board, [p1Inventory, p2Inventory, neutralInventory], c.SETUP_PHASE_1, c.PLAYER_ONE)
+
+    def place_items(self, piece, constrsToPlace, state):
+        #translate coords to match player
+        piece = state.coordLookup(piece, state.whoseTurn)
+        #get construction to place
+        constr = constrsToPlace.pop(0)
+        #give constr its coords
+        constr.coords = piece
+        #put constr on board
+        state.board[piece[0]][piece[1]].constr = constr
+        if constr.type == c.ANTHILL or constr.type == c.TUNNEL:
+            #update the inventory
+            state.inventories[state.whoseTurn].constrs.append(constr)
+        else:  #grass and food
+            state.inventories[c.NEUTRAL].constrs.append(constr)
+
+    def setup_play(self, state):
+        p1inventory = state.inventories[c.PLAYER_ONE]
+        p2inventory = state.inventories[c.PLAYER_TWO]
+        #get anthill coords
+        p1AnthillCoords = p1inventory.constrs[0].coords
+        p2AnthillCoords = p2inventory.constrs[0].coords
+        #get tunnel coords
+        p1TunnelCoords = p1inventory.constrs[1].coords
+        p2TunnelCoords = p2inventory.constrs[1].coords
+        #create queen and worker ants
+        p1Queen = Ant(p1AnthillCoords, c.QUEEN, c.PLAYER_ONE)
+        p2Queen = Ant(p2AnthillCoords, c.QUEEN, c.PLAYER_TWO)
+        p1Worker = Ant(p1TunnelCoords, c.WORKER, c.PLAYER_ONE)
+        p2Worker = Ant(p2TunnelCoords, c.WORKER, c.PLAYER_TWO)
+        #put ants on board
+        state.board[p1Queen.coords[0]][p1Queen.coords[1]].ant = p1Queen
+        state.board[p2Queen.coords[0]][p2Queen.coords[1]].ant = p2Queen
+        state.board[p1Worker.coords[0]][p1Worker.coords[1]].ant = p1Worker
+        state.board[p2Worker.coords[0]][p2Worker.coords[1]].ant = p2Worker
+        #add the queens to the inventories
+        p1inventory.ants.append(p1Queen)
+        p2inventory.ants.append(p2Queen)
+        p1inventory.ants.append(p1Worker)
+        p2inventory.ants.append(p2Worker)
+        #give the players the initial food
+        p1inventory.foodCount = 1
+        p2inventory.foodCount = 1
+        #change to play phase
+        state.phase = c.PLAY_PHASE
+
+    def create_state(self, ai):
+        self.state = self.setup_state()
+        players = [c.PLAYER_ONE, c.PLAYER_TWO]
+
+        for player in players:
+            self.state.whoseTurn = player
+            constrsToPlace = []
+            constrsToPlace += [Building(None, c.ANTHILL, player)]
+            constrsToPlace += [Building(None, c.TUNNEL, player)]
+            constrsToPlace += [Construction(None, c.GRASS) for i in xrange(0,9)]
+
+            setup = ai.getPlacement(self.state)
+
+            for piece in setup:
+                self.place_items(piece, constrsToPlace, self.state)
+
+            self.state.flipBoard()
+
+        self.state.phase = c.SETUP_PHASE_2
+
+        for player in players:
+            self.state.whoseTurn = player
+            constrsToPlace = []
+            constrsToPlace += [Construction(None, c.FOOD) for i in xrange(0,2)]
+
+            setup = ai.getPlacement(self.state)
+
+            for food in setup:
+                self.place_items(food, constrsToPlace, self.state)
+
+            self.state.flipBoard()
+
+        self.setup_play(self.state)
+        self.state.whoseTurn = c.PLAYER_ONE
+        return self.state
+
+def main():
+    unittest.main()
+
+if __name__ == '__main__':
+    main()
+
