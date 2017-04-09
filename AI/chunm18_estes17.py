@@ -36,6 +36,8 @@ class AIPlayer(Player):
         """
         super(AIPlayer, self).__init__(inputPlayerId, "Clever")
         self.weights_changed = False
+        self.same_count_limit = 5
+        self.same_count = 0
         self.sum_in = 0
         self.network_inputs = []
         self.network_weights = []
@@ -163,7 +165,8 @@ class AIPlayer(Player):
 
         if len(our_workers) < 3:
             good_points += 800
-            total_points += 800
+        
+        total_points += 800
 
         # Raw ant numbers comparison
         total_points += (len(our_inv.ants) + len(enemy_inv.ants)) * 10  
@@ -333,19 +336,25 @@ class AIPlayer(Player):
         else:
             return [(0, 0)]
 
-    def adjust_weights(self, actual, target):
+    def adjust_weights(self, target, actual):
         """
         Description: Back propagates through the neural network to 
                      adjust weights.
 
         Parameters:  
-            target - the output of the neural network
-            actual - the output of the eval function score_state
+            target - the output of the eval function score_state
+            actual - the output of the neural network
         """
         error = target - actual
+
         print("Error: " + str(error))
-        print("neural net: " + str(target))
-        print("eval ftn: " + str(actual))
+        #if actual < .5:
+        print("neural net: " + str(actual))
+        print("eval ftn: " + str(target))
+
+        if self.sum_in < 5000 or self.sum_in > 5000:
+            return 
+
         delta = error * self.calc_g() * (1-self.calc_g())
 
         for x in range(0, len(self.network_inputs)):
@@ -354,6 +363,7 @@ class AIPlayer(Player):
                 self.network_weights[x] = output
 
     def calc_g(self):
+        print("sum in: " + str(self.sum_in))
         return 1 / (1 + math.exp(self.sum_in*-1))
 
     def getMove(self, currentState):
@@ -375,9 +385,9 @@ class AIPlayer(Player):
         node.alpha = 2
         move = self.expand(node, self.dLim, True, -2,2)
         
-        if not self.weights_changed:
+        '''if not self.weights_changed:
             for x in range(0, len(self.network_weights)):
-                print(self.network_weights[x])
+                print(self.network_weights[x])'''
 
         if move is None:
             return Move(c.END, None, None)
@@ -431,7 +441,7 @@ class AIPlayer(Player):
         return self.calc_g()
 
     def fill_inputs(self, currentState):
-        self.network_inputs[:]
+        self.network_inputs = []
         current_input = 0
 
         for x in range(0,2):
@@ -440,31 +450,30 @@ class AIPlayer(Player):
             else:
                 player = 1 - self.playerId
 
-            for y in range(0,17):
-                inv = currentState.inventories[player]
-                food = inv.foodCount
-                anthill = inv.getAnthill()
-                queen = inv.getQueen()
-                workers = [ant for ant in inv.ants if ant.type == c.WORKER]
-                offensive = [c.SOLDIER, c.R_SOLDIER, c.DRONE]
-                attackers = [ant for ant in inv.ants if ant.type in offensive]
+            inv = currentState.inventories[player]
+            food = inv.foodCount
+            anthill = inv.getAnthill()
+            queen = inv.getQueen()
+            workers = [ant for ant in inv.ants if ant.type == c.WORKER]
+            offensive = [c.SOLDIER, c.R_SOLDIER, c.DRONE]
+            attackers = [ant for ant in inv.ants if ant.type in offensive]
 
-                self.food_health_inputs(food, 3, 6)
-                self.food_health_inputs(queen.health, 3, 6)
-                self.food_health_inputs(anthill.captureHealth, 1, 2)
+            self.food_health_inputs(food, 3, 6)
+            self.food_health_inputs(queen.health, 3, 6)
+            self.food_health_inputs(anthill.captureHealth, 1, 2)
 
-                self.ant_inputs(len(workers), 0, 1, 3)
-                self.ant_inputs(len(attackers), 0, 1, 3)
+            self.ant_inputs(len(workers), 0, 1, 3)
+            self.ant_inputs(len(attackers), 0, 1, 3)
 
     def ant_inputs(self, obj, val1, val2, val3):
         if(obj <= val1):
-            self.insert_inputs(3, [1,0,0,0])
+            self.insert_inputs(4, [1,0,0,0])
         elif(obj <= val2):
-            self.insert_inputs(3, [0,1,0,0])
+            self.insert_inputs(4, [0,1,0,0])
         elif(obj <= val3):
-            self.insert_inputs(3, [0,0,1,0])
+            self.insert_inputs(4, [0,0,1,0])
         else:
-            self.insert_inputs(3, [0,0,0,1]) 
+            self.insert_inputs(4, [0,0,0,1]) 
 
     def food_health_inputs(self, obj, val1, val2):
         if(obj <= val1):
@@ -519,6 +528,9 @@ class AIPlayer(Player):
 
         childrentemp = []
         children = []
+        random.shuffle(gameStates)
+
+        self.same_count = 0
         for n in range(len(gameStates)):
             score = self.score_state(gameStates[n])            #eval ftn
             network_score = self.neural_network(gameStates[n]) #call neural network
@@ -526,7 +538,14 @@ class AIPlayer(Player):
                 self.weights_changed = True 
                 self.adjust_weights(score, network_score)
             else:
+                self.same_count += 1
                 print("Same")
+
+            if(self.same_count > self.same_count_limit):
+                print("weights start")
+                for x in range(0, len(self.network_weights)):
+                    print(self.network_weights[x])
+                print("weights end")
             childrentemp.append([score,Node(moves[n], gameStates[n], score, node)])
 
         childrentemp = sorted(childrentemp, key=lambda x: x[0])
