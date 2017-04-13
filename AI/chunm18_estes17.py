@@ -34,15 +34,12 @@ class AIPlayer(Player):
         Parameters:
             inputPlayerId - The id to give the new player (int)
         """
-        super(AIPlayer, self).__init__(inputPlayerId, "Clever")
-        self.weights_changed = False
-        self.same_count_limit = 75
-        self.same_count = 0
-        self.sum_in = 0
-        self.network_inputs = []
-        self.network_weights = []
-        self.bias = 1
-        self.bias_weight = 1
+        super(AIPlayer, self).__init__(inputPlayerId, "Pink Puppies")
+        self.sum_in = 0             #weighted inputs to network
+        self.network_inputs = []    #inputs for network
+        self.network_weights = []   #weights for network
+        self.bias = 1               #bias value
+        self.bias_weight = 1        #weight of bias
         self.dLim = 3               #depth limit
         self.searchMult = 2.5       #generate search limits for depths
         self.searchLim = []         #search limit size control
@@ -337,7 +334,7 @@ class AIPlayer(Player):
 
     def adjust_weights(self, target, actual):
         """
-        Description: Back propagates through the neural network to 
+        Description: Back propagation through the neural network to 
                      adjust weights.
 
         Parameters:  
@@ -346,19 +343,17 @@ class AIPlayer(Player):
         """
         error = target - actual
 
-        #print("Error: " + str(error))
-        #if actual < .5:
-        #print("neural net: " + str(actual))
-        #print("eval ftn: " + str(target))
-
+        #slope of activation function multiplied by the error
         delta = error * self.calc_g() * (1-self.calc_g())
 
+        #update the weights of the network for each input
         for x in range(0, len(self.network_inputs)):
             output = self.network_weights[x] + (delta * self.network_inputs[x])
             if output != 0.0:
                 self.network_weights[x] = output
 
     def calc_g(self):
+        '''calculate result of activation function for network'''
         return 1 / (1 + math.exp(self.sum_in*-1))
 
     def getMove(self, currentState):
@@ -378,16 +373,10 @@ class AIPlayer(Player):
         node = Node(None, currentState)
         node.beta = -2
         node.alpha = 2
-        self.weights_changed = False
         move = self.expand(node, self.dLim, True, -2,2)
-        
-        '''if(not self.weights_changed):
-            print("start")
-            for x in range(0, len(self.network_weights)):
-                print(self.network_weights[x])
-            print("end")'''
 
-        if move is None:
+        #don't build more than 5 ants 
+        if(move is None or (move.buildType is c.BUILD and currentState.inventories[self.playerId].ants > 5)):
             return Move(c.END, None, None)
 
         return move
@@ -424,35 +413,48 @@ class AIPlayer(Player):
         """
         self.fill_inputs(currentState)          #fill in inputs to neural network
 
-        correct_weights = [-0.19989987869, 0.575296537021, -0.790157016078, 0.122348581121, 0.439977493331, 0.0945533634476, 0.193257595531, 
-        0.608610635316, -0.547091789577, -0.556154410349, 0.664053540487, 1.28211813459, -2.3348782998, -0.630480359892, -0.658038267324,
-        0.279114055434, 0.285908744918, 0.288456116063, -0.674821787348, 0.196087050865, 0.239985502563, 0.766111417156, 
-        -0.644112336034, 0.262415516703,-0.567031131381, -0.0227533193014,0.321295510228, 0.394677078019, 0.43694189521, -0.886360727604,
-        0.116928308988, 0.280371143609, -0.680139242929, 0.274653505746]
-        if(len(self.network_weights) != len(self.network_inputs)): #fill in random weights if none
+        #hard coded weights for network based off of training
+        correct_weights = [-0.222412223625,0.555904150835,-0.790157016078,0.121299576505,0.439977493331,
+        0.0536976369434,0.193257595531,0.00743766924298,0.0121764453754,-0.556154410349,1.18288556613,
+        1.42744439652,-3.0409413185,-0.955564594122,-0.374858764215,0.279114055434,0.285908744918,
+        0.208967342712,-0.637237745117,0.196087050865,0.239985502563,0.766111417156,-0.686017067155,
+        0.262415516703,-0.567031131381,-0.064658050422,0.321295510228,0.441910909755,0.347803332353,
+        -0.886360727604,0.14427801387,0.211116707607,-0.680139242929,0.274653505746]
+
+        #add hard coded weights to network
+        if(len(self.network_weights) != len(self.network_inputs)): 
             for x in range(0, len(self.network_inputs)):
-                '''val = 0
-                while val == 0:
-                    val = random.uniform(-1,1)'''
                 self.network_weights.append(correct_weights[x])
 
+        #reset sum_in for new inputs
         self.sum_in = 0
 
-        for x in range(0, len(self.network_inputs)): #getting sum in for node
+        #get sum_in for node
+        for x in range(0, len(self.network_inputs)):
             self.sum_in += self.network_inputs[x]*self.network_weights[x]
 
-        return self.calc_g()
+        #return output from activation function
+        return self.calc_g()    
 
     def fill_inputs(self, currentState):
-        self.network_inputs = []
-        current_input = 0
+        """
+        Description:
+            Helper method to fill in inputs to neural network based off the current state
 
+        Parameters:
+            currentState - the game state being looked at
+        """
+        self.network_inputs = []    #reset the inputs to the network
+
+        #fill in inputs for the agent, then the adversary 
         for x in range(0,2):
+            #change player to agent first, the adversary during second pass
             if(x == 0):
                 player = self.playerId
             else:
                 player = 1 - self.playerId
 
+            #input components 
             inv = currentState.inventories[player]
             food = inv.foodCount
             anthill = inv.getAnthill()
@@ -461,24 +463,46 @@ class AIPlayer(Player):
             offensive = [c.SOLDIER, c.R_SOLDIER, c.DRONE]
             attackers = [ant for ant in inv.ants if ant.type in offensive]
 
-            self.food_health_inputs(food, 3, 6)
-            self.food_health_inputs(queen.health, 3, 6)
-            self.food_health_inputs(anthill.captureHealth, 1, 2)
+            #check that the game is not over
+            if queen is not None and anthill is not None:
+                #fill in inputs for food and health
+                self.food_health_inputs(food, 3, 6)
+                self.food_health_inputs(queen.health, 3, 6)
+                self.food_health_inputs(anthill.captureHealth, 1, 2)
 
-            self.ant_inputs(len(workers), 0, 1, 3)
-            self.ant_inputs(len(attackers), 0, 1, 3)
+            #fill in inputs for types of ants
+            self.ant_inputs(len(workers))
+            self.ant_inputs(len(attackers))
 
-    def ant_inputs(self, obj, val1, val2, val3):
-        if(obj <= val1):
+    def ant_inputs(self, obj):
+        """
+        Description:
+            Helper method to fill in inputs for ants in certain buckets. The first bucket for
+            number of ants is 0 ants. The second bucket for number of ants is 1 ant. The third 
+            bucket for number of ants is three ants.
+
+        Parameters:
+            obj - number of ants either of type worker or attacker
+        """
+        if(obj <= 0):
             self.insert_inputs(4, [1,0,0,0])
-        elif(obj <= val2):
+        elif(obj <= 1):
             self.insert_inputs(4, [0,1,0,0])
-        elif(obj <= val3):
+        elif(obj <= 3):
             self.insert_inputs(4, [0,0,1,0])
         else:
             self.insert_inputs(4, [0,0,0,1]) 
 
     def food_health_inputs(self, obj, val1, val2):
+        """
+        Description:
+            Helper method to fill in inputs for food and health points
+
+        Parameters:
+            obj - number of food points or health points for the queen or anthill
+            val1 - first bucket for inputs 
+            val2 - second bucket for inputs
+        """
         if(obj <= val1):
             self.insert_inputs(3, [1,0,0])
         elif(obj <= val2):
@@ -487,6 +511,7 @@ class AIPlayer(Player):
             self.insert_inputs(3, [0,0,1])
 
     def insert_inputs(self, size, vals):
+        '''Helper method to add values to the input array for the network'''
         for x in range(0, size):
             self.network_inputs.append(vals[x])
 
@@ -505,7 +530,7 @@ class AIPlayer(Player):
 
         # if depth = 0 or node is terminal return heuristic
         if depth == 0:
-            node.score = self.score_state(node.nextState)
+            node.score = self.neural_network(node.nextState)
             return node.score
         
         #get all possible moves for the current player
@@ -535,19 +560,11 @@ class AIPlayer(Player):
 
         self.same_count = 0
         for n in range(len(gameStates)):
-            score = self.score_state(gameStates[n])            #eval ftn
-            network_score = self.neural_network(gameStates[n]) #call neural network
-            if(abs(score - network_score) > .03):
+            #score = self.score_state(gameStates[n])   #eval ftn used to train network
+            score = self.neural_network(gameStates[n]) #call neural network
+            '''if(abs(score - network_score) > .03):   #criteria used to train network
                 self.weights_changed = True 
-                self.adjust_weights(score, network_score)
-            else:
-                self.same_count += 1
-
-            if(self.same_count > self.same_count_limit):
-                print("weights start")
-                for x in range(0, len(self.network_weights)):
-                    print(self.network_weights[x])
-                print("weights end")
+                self.adjust_weights(score, network_score)'''
             childrentemp.append([score,Node(moves[n], gameStates[n], score, node)])
 
         childrentemp = sorted(childrentemp, key=lambda x: x[0])
@@ -561,9 +578,10 @@ class AIPlayer(Player):
 
         # if depth = 0 or node is terminal return heuristic
         if len(children) == 0:
-            node.score = self.score_state(node.nextState)
+            node.score = self.neural_network(node.nextState)
             return node.score
 
+        #minimax max player to maximize score from network
         if maxPlayer:
             node.score = -2
             for child in children:
@@ -577,7 +595,7 @@ class AIPlayer(Player):
             if depth == self.dLim:
                 return self.evaluate_nodes(children, True).move
             return self.evaluate_nodes(children, True).score#node.score
-        else:
+        else: #minimax min player to minimize score from network
             node.score = 2
             for child in children:
                 v = self.expand(child, depth - 1, child.nextState.whoseTurn == self.playerId,a,b)
@@ -746,25 +764,28 @@ class Node:
         self.beta = None
         self.alpha = None
 
+#unit tests
 class Unit_Tests(unittest.TestCase):
 
     def test_neural_network(self):
+        #unit test for neural network
         ai = AIPlayer(0)
         self.state = self.create_state(ai)
         output = ai.neural_network(self.state)
         self.assertTrue(type(output) is float)
 
     def test_adjust_weights(self):
-        #target - o/p out neural net, actual - o/p of eval ftn
+        #unit test for back propagation of adjusting weights
         ai = AIPlayer(0)
         self.state = self.create_state(ai)
         output_neural = ai.neural_network(self.state)
-        output_eval_ftn = ai.score_state(self.state)
+        output_eval_ftn = ai.neural_network(self.state)
         ai.adjust_weights(output_neural, output_eval_ftn)
         for x in range(0, len(ai.network_weights)):
             self.assertTrue(type(ai.network_weights[x]) is float)
 
     def setup_state(self):
+        #add elements to game state
         board = [[Location((col, row)) for row in xrange(0,c.BOARD_LENGTH)] for col in xrange(0,c.BOARD_LENGTH)]
         p1Inventory = Inventory(c.PLAYER_ONE, [], [], 0)
         p2Inventory = Inventory(c.PLAYER_TWO, [], [], 0)
@@ -817,6 +838,7 @@ class Unit_Tests(unittest.TestCase):
         state.phase = c.PLAY_PHASE
 
     def create_state(self, ai):
+        #create game state for testing
         self.state = self.setup_state()
         players = [c.PLAYER_ONE, c.PLAYER_TWO]
 
