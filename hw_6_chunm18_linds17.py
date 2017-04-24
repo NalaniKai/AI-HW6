@@ -15,7 +15,7 @@ import unittest
 from Location import Location 
 from Inventory import Inventory
 from Building import Building
-import unittest
+import json
 
 class AIPlayer(Player):
     """
@@ -35,12 +35,19 @@ class AIPlayer(Player):
         Parameters:
             inputPlayerId - The id to give the new player (int)
         """
-        super(AIPlayer, self).__init__(inputPlayerId, "Clever Name")
-        self.alpha = .99
-        self.gamma = .15
-        self.stateDict = dict()
-        self.pastTen = Queue()
-        self.PASTLIM = 10
+        super(AIPlayer, self).__init__(inputPlayerId, "Fluffy")
+        self.alpha = .99    #for TD learning
+        self.gamma = .15    #for TD learning
+        self.conCurrentState = None #consolidated state to add to last ten states seen
+        self.stateDict = None   #dictionary of past consolidated states seen
+        with open('..\chunm18_linds17.json', 'r') as file:
+            try:
+                self.stateDict = json.load(file)
+                print len(self.stateDict)
+            except ValueError:
+                self.stateDict = dict()
+        self.pastTen = []           #last ten states seen (consolidated)
+        self.PASTLIM = 10           #only look at last 10 states
         self.dLim = 3               #depth limit
         self.searchMult = 2.5       #generate search limits for depths
         self.searchLim = []         #search limit size control
@@ -334,10 +341,21 @@ class AIPlayer(Player):
             return [(0, 0)]
 
     def consolidateState(self, currentState):
+        '''
+        Description: Turns currentState into a consolidated state list
+
+        Parameters:
+            currentState - game state 
+
+        Return:
+            consolidated state
+        '''
+        #initialize with 0
         newState = []
-        for x in range(0,21):
+        for x in range(0,22):
             newState.append(0)
 
+        #variables to fill in consolidated state
         enemyId = 1 - self.playerId
         enemyInv = [inv for inv in currentState.inventories if inv.player == enemyId].pop()
         enemyAnts = enemyInv.ants
@@ -348,7 +366,9 @@ class AIPlayer(Player):
         ourWorkers = [ant for ant in ourInv.ants if ant.type == c.WORKER]
         workerNum = len(ourWorkers)
         ourQueen = ourInv.getQueen()
-        queenHealth = ourQueen.health
+        queenHealth = 0
+        if ourQueen != None:
+            queenHealth = ourQueen.health
         ourHill = ourInv.getAnthill()
         ourTunnel = ourInv.getTunnels()
         ourFood = utils.getConstrList(currentState, self.playerId, (c.FOOD,))
@@ -358,6 +378,7 @@ class AIPlayer(Player):
             foodDropOffs.append(ourTunnel[0].coords)
         foodDropOffs.append(ourHill.coords)
 
+        #bins for attacker ant distances from the enemy ants
         for ant in ourAttackers:
             x = ant.coords[0]
             y = ant.coords[1]
@@ -370,6 +391,7 @@ class AIPlayer(Player):
                 else:
                     newState[2] = newState[2] + 1
 
+        #bins for worker ants and proximity to food or dropping off food
         for ant in ourWorkers:
             x = ant.coords[0]
             y = ant.coords[1]
@@ -388,26 +410,42 @@ class AIPlayer(Player):
                     elif dist <= 4:
                         newState[6] = newState[6] + 1
 
-        if ourQueen.coords in foodDropOffs:
-            newState[7] = 1
+        if ourQueen != None:
+            if ourQueen.coords in foodDropOffs:
+                newState[7] = 1
 
+        #fill in consolidated state slots for food count and queen health
         self.populateNewFoodAndQueen(newState, foodAmount, 8)
         self.populateNewFoodAndQueen(newState, queenHealth, 11)
 
+        #fill in consolidated state slots for worker ants and attacker ants 
         self.populateNewOurAnts(newState, workerNum, 14)
         self.populateNewOurAnts(newState, attackerNum, 18)
 
-        self.pastTen.put(newState)
-        if len(self.pastTen) > self.PASTLIM:
-            self.pastTen.get()
+        #to track whose turn it is for minimax
+        if currentState.whoseTurn == self.playerId:
+            newState[21] = 1
 
+        #convert to tuple so can use as key in dictionary 
+        newState = tuple(newState)
+
+        #update the utility of each state
         if newState in self.stateDict:
-            self.stateDict[newState] = self.stateDict[newState]-.01
+            self.stateDict[str(newState)] = self.stateDict[str(newState)]-.01
         else:
-            self.stateDict[newState] = -.01
+            self.stateDict[str(newState)] = -.01
 
+        return newState
 
     def populateNewFoodAndQueen(self, newState, value, pos): 
+        '''
+        Description: Fills food count and queen health in the consolidated state list
+
+        Parameters:
+            newState - the consolidated state; list
+            value - the comparison for filling the bins for the input
+            pos - position to fill the consolidated state list  
+        '''
         if value < 3:
             newState[pos] = newState[pos] + 1
         elif value < 6:
@@ -416,6 +454,14 @@ class AIPlayer(Player):
             newState[pos+2] = newState[pos+2] + 1
 
     def populateNewOurAnts(self, newState, value, pos):
+        '''
+        Description: Fills worker ant and attacker ant numbers in the consolidated state list
+
+        Parameters:
+            newState - the consolidated state; list
+            value - the comparison for filling the bins for the input
+            pos - position to fill the consolidated state list  
+        '''
         if value <= 1:
             newState[pos] = newState[pos] + 1
         elif value <= 2:
@@ -446,6 +492,13 @@ class AIPlayer(Player):
         if move is None:
             return Move(c.END, None, None)
 
+        #past ten states 
+        if self.conCurrentState != None:
+            self.pastTen.insert(0, self.conCurrentState)
+            if len(self.pastTen) > self.PASTLIM:
+                self.pastTen.pop()
+
+        #all states has a -.01 reward unless there is a win or lose
         self.updateUtility(-.01)
         return move
 
@@ -481,16 +534,20 @@ class AIPlayer(Player):
         '''
 
         # if depth = 0 or node is terminal return heuristic
+        conState = self.consolidateState(node.nextState)
         if depth == 0:
-            node.score = self.score_state(node.nextState)
-            return node.score
+            return self.stateDict[str(conState)]
         
         #get all possible moves for the current player
         moves = utils.listAllLegalMoves(node.nextState)
 
+        #remove illegal moves
         badmoves = []
+        ourInv = [inv for inv in node.nextState.inventories if inv.player == self.playerId].pop()
+        ourWorkers = [ant for ant in ourInv.ants if ant.type == c.WORKER]
         for i in moves:
             if (i.moveType == c.BUILD and i.buildType == c.TUNNEL) or \
+               (i.moveType == c.BUILD and i.buildType == c.WORKER and len(ourWorkers) > 5) or \
                (i.moveType == c.MOVE_ANT and not utils.isPathOkForQueen(i.coordList) and\
                 utils.getAntAt(node.nextState, i.coordList[0]).type == c.WORKER):
                 badmoves.append(i)
@@ -504,49 +561,53 @@ class AIPlayer(Player):
         #generate a list of all next game states
         gameStates = []
         for m in moves:
-            gameStates.append(self.getNextStateAdversarial(node.nextState,m))
+            gameStates.append(self.getNextStateAdversarial(node.nextState,m))        
 
+        conGameStates = []      #consolidated game states of possible next states
         childrentemp = []
         children = []
         for n in range(len(gameStates)):
-            score = self.score_state(gameStates[n])
-            childrentemp.append([score,Node(moves[n], gameStates[n], score, node)])
+            conGameStates.append(self.consolidateState(gameStates[n]))
+            childrentemp.append([gameStates[n], Node(moves[n], gameStates[n], self.stateDict[str(conGameStates[n])], node)])
 
         childrentemp = sorted(childrentemp, key=lambda x: x[0])
-        if self.playerId == node.nextState.whoseTurn:
+        if self.playerId == conState[21]:
             childrentemp = reversed(childrentemp)
         for n in childrentemp:
             if len(children) >= self.searchLim[depth]:
                 break
             children.append(n[1])
+
         random.shuffle(children)
 
         # if depth = 0 or node is terminal return heuristic
         if len(children) == 0:
-            node.score = self.score_state(node.nextState)
-            return node.score
+            return self.stateDict[str(conState)]
 
-        if maxPlayer:
+        if maxPlayer: #agent
             node.score = -2
             for child in children:
-                v = self.expand(child, depth - 1, child.nextState.whoseTurn == self.playerId, a,b)
-                node.score = max(v, node.score)
-                if node.score >= b:
+                v = self.expand(child, depth - 1, conState[21] == self.playerId, a,b)
+                self.stateDict[str(conState)] = max(v, self.stateDict[str(conState)])
+                if self.stateDict[str(conState)] >= b:
                     if depth == self.dLim:
-                        return childnode.move
-                    return node.score
+                        self.conCurrentState = self.consolidateState(child.nextState)
+                        return child.move
+                    return self.stateDict[str(conState)]
                 a = max(a, child.score)
             if depth == self.dLim:
-                return self.evaluate_nodes(children, True).move
+                n = self.evaluate_nodes(children, True)
+                self.conCurrentState = self.consolidateState(n.nextState)
+                return n.move
             return self.evaluate_nodes(children, True).score#node.score
-        else:
+        else: #opponent
             node.score = 2
             for child in children:
-                v = self.expand(child, depth - 1, child.nextState.whoseTurn == self.playerId,a,b)
-                node.score = min(v, node.score)
-                if node.score <= a:
-                    return node.score
-                b = min(b, node.score)
+                v = self.expand(child, depth - 1, conState[21] == self.playerId,a,b)
+                node.score = min(v, self.stateDict[str(conState)])
+                if self.stateDict[str(conState)] <= a:
+                    return self.stateDict[str(conState)]
+                b = min(b, self.stateDict[str(conState)])
             return self.evaluate_nodes(children, False).score
 
     def getNextStateAdversarial(self, currentState, move):
@@ -691,24 +752,44 @@ class AIPlayer(Player):
 
 
     def registerWin(self, haswon):
+        '''
+        Description:    Gets called after the game is over. Performs echoing of updated utilities to 
+                        the ten most recent states. The reward is 1 if the agent wins and -1 if the 
+                        agent loses.
+
+        Parameters:
+            haswon - whether or not the agent has won, boolean
+        '''
         if(haswon):
             self.updateUtility(1)
         else:
             self.updateUtility(-1)
 
+        #Minimizes alpha value over time
         self.alpha = self.alpha * .95
 
+        #Dumps dictionary of consoolidated + values to file
+        with open('chunm18_linds17.json', 'w') as file:
+            json.dump(self.stateDict, file)
+            file.flush()
+
     def updateUtility(self, reward):
+        '''
+        Description: Updates the utility of the last ten states given a reward value
+
+        Parameters: reward - the reward value of the given state in reference to win, loss, or neither
+        '''
+
+        #The score of the previous state, assumed 0 at first
         last = 0
         self.gamma = .15
-        for x in range(0, self.PASTLIM):
-            state = self.pastTen.get()
-            currentVal = self.stateDict[state]
-            self.stateDict[state] = currentVal + self.alpha * (reward + self.gamma * (last - currentVal))
-            self.gamma = self.gamma * 1.2
-            last = self.stateDict[state]
-
-
+        #Loops through past ten states and updates scores in dictionary based on TD algorithm
+        for x in range(0, len(self.pastTen)):
+            state = self.pastTen[len(self.pastTen) - (x + 1)]
+            currentVal = self.stateDict[str(state)]            
+            self.stateDict[str(state)] = currentVal + self.alpha * (reward + self.gamma * (last - currentVal))
+            self.gamma = self.gamma * 1.2            
+            last = self.stateDict[str(state)]
 ##
 #class to represent node containing info for next state given a move
 ##
@@ -727,108 +808,3 @@ class Node:
         self.child = child
         self.beta = None
         self.alpha = None
-
-#unit tests
-class Unit_Tests(unittest.TestCase):
-
-    def test_consolidateState(self):
-        #unit test for neural network
-        ai = AIPlayer(0)
-        self.state = self.create_state(ai)
-        print utils.asciiPrintState(self.state)
-        ai.consolidateState(self.state)
-        self.assertTrue()
-
-    def setup_state(self):
-        board = [[Location((col, row)) for row in xrange(0,c.BOARD_LENGTH)] for col in xrange(0,c.BOARD_LENGTH)]
-        p1Inventory = Inventory(c.PLAYER_ONE, [], [], 0)
-        p2Inventory = Inventory(c.PLAYER_TWO, [], [], 0)
-        neutralInventory = Inventory(c.NEUTRAL, [], [], 0)
-        return GameState(board, [p1Inventory, p2Inventory, neutralInventory], c.SETUP_PHASE_1, c.PLAYER_ONE)
-
-    def place_items(self, piece, constrsToPlace, state):
-        #translate coords to match player
-        piece = state.coordLookup(piece, state.whoseTurn)
-        #get construction to place
-        constr = constrsToPlace.pop(0)
-        #give constr its coords
-        constr.coords = piece
-        #put constr on board
-        state.board[piece[0]][piece[1]].constr = constr
-        if constr.type == c.ANTHILL or constr.type == c.TUNNEL:
-            #update the inventory
-            state.inventories[state.whoseTurn].constrs.append(constr)
-        else:  #grass and food
-            state.inventories[c.NEUTRAL].constrs.append(constr)
-
-    def setup_play(self, state):
-        p1inventory = state.inventories[c.PLAYER_ONE]
-        p2inventory = state.inventories[c.PLAYER_TWO]
-        #get anthill coords
-        p1AnthillCoords = p1inventory.constrs[0].coords
-        p2AnthillCoords = p2inventory.constrs[0].coords
-        #get tunnel coords
-        p1TunnelCoords = p1inventory.constrs[1].coords
-        p2TunnelCoords = p2inventory.constrs[1].coords
-        #create queen and worker ants
-        p1Queen = Ant(p1AnthillCoords, c.QUEEN, c.PLAYER_ONE)
-        p2Queen = Ant(p2AnthillCoords, c.QUEEN, c.PLAYER_TWO)
-        p1Worker = Ant(p1TunnelCoords, c.WORKER, c.PLAYER_ONE)
-        p2Worker = Ant(p2TunnelCoords, c.WORKER, c.PLAYER_TWO)
-        #put ants on board
-        state.board[p1Queen.coords[0]][p1Queen.coords[1]].ant = p1Queen
-        state.board[p2Queen.coords[0]][p2Queen.coords[1]].ant = p2Queen
-        state.board[p1Worker.coords[0]][p1Worker.coords[1]].ant = p1Worker
-        state.board[p2Worker.coords[0]][p2Worker.coords[1]].ant = p2Worker
-        #add the queens to the inventories
-        p1inventory.ants.append(p1Queen)
-        p2inventory.ants.append(p2Queen)
-        p1inventory.ants.append(p1Worker)
-        p2inventory.ants.append(p2Worker)
-        #give the players the initial food
-        p1inventory.foodCount = 1
-        p2inventory.foodCount = 1
-        #change to play phase
-        state.phase = c.PLAY_PHASE
-
-    def create_state(self, ai):
-        self.state = self.setup_state()
-        players = [c.PLAYER_ONE, c.PLAYER_TWO]
-
-        for player in players:
-            self.state.whoseTurn = player
-            constrsToPlace = []
-            constrsToPlace += [Building(None, c.ANTHILL, player)]
-            constrsToPlace += [Building(None, c.TUNNEL, player)]
-            constrsToPlace += [Construction(None, c.GRASS) for i in xrange(0,9)]
-
-            setup = ai.getPlacement(self.state)
-
-            for piece in setup:
-                self.place_items(piece, constrsToPlace, self.state)
-
-            self.state.flipBoard()
-
-        self.state.phase = c.SETUP_PHASE_2
-
-        for player in players:
-            self.state.whoseTurn = player
-            constrsToPlace = []
-            constrsToPlace += [Construction(None, c.FOOD) for i in xrange(0,2)]
-
-            setup = ai.getPlacement(self.state)
-
-            for food in setup:
-                self.place_items(food, constrsToPlace, self.state)
-
-            self.state.flipBoard()
-
-        self.setup_play(self.state)
-        self.state.whoseTurn = c.PLAYER_ONE
-        return self.state
-
-def main():
-    unittest.main()
-
-if __name__ == '__main__':
-    main()
